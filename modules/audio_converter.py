@@ -1,0 +1,113 @@
+from pathlib import Path
+import subprocess
+import sys
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+
+from utils import constants as const
+from utils import utility as util
+
+
+def normalize_audio_file(input_extension: str, book_path: str):
+    """
+    Convert all files with the given input extension to the output format
+    specified in constants.py.
+
+    Example:
+        normalize_audio(".m4a")
+        normalize_audio(".flac")
+    """
+
+    book_path = Path(book_path)
+
+    if book_path.is_file():
+        files = [book_path]
+        book_dir = book_path.parent
+    elif book_path.is_dir():
+        book_dir = book_path
+
+        files = sorted(
+            [
+                path
+                for path in book_dir.iterdir()
+                if (path.is_file() and path.suffix.lower() == input_extension.lower())
+            ],
+            key=lambda path: path.name.lower(),
+        )
+    else:
+        raise FileNotFoundError(book_path)
+
+    # book_dir = book_path
+    BITRATE = "128k"
+    OUTPUT_EXTENSION = ".mp3"
+    OUTPUT_CODEC = "libmp3lame"
+
+    if not files:
+        return
+
+    for i, src in enumerate(files, start=1):
+
+        tmp = book_dir / f"{src.stem}.tmp{OUTPUT_EXTENSION}"
+        dst = book_dir / f"{src.stem}{OUTPUT_EXTENSION}"
+
+        if dst.exists():
+            util.log_info(f" {dst.name} already exists. " f"Removing source {src.name}.")
+            src.unlink()
+            continue
+
+        if tmp.exists():
+            tmp.unlink()
+
+        cmd = [
+            "ffmpeg",
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(src),
+            "-codec:a",
+            OUTPUT_CODEC,
+            "-b:a",
+            BITRATE,
+            str(tmp),
+        ]
+
+        try:
+            subprocess.run(cmd, check=True)
+
+            tmp.replace(dst)
+            src.unlink()
+
+            util.log(f"[cyan1] [{i}/{len(files)}][/cyan1] {src.name} -> {dst.name}")
+
+        except subprocess.CalledProcessError:
+            if tmp.exists():
+                tmp.unlink()
+            util.log(f" {src.name}")
+
+        except Exception as e:
+            if tmp.exists():
+                tmp.unlink()
+            util.log(f" {src.name}: {e}")
+
+    print()
+    util.log_ok(f" Audio conversion complete.")
+
+
+def normalize_audiobook(book_dir: str):
+
+    # ---------- Convert supported audio formats to the standard format (.mp3) ----------
+    print()
+    print("=" * 70)
+    util.log(" " * 20+"[bold][dark_turquoise]PHASE 2 : AUDIO CONVERSION[/bold][/dark_turquoise]")
+    print("=" * 70, "\n")
+
+    for extension in const.SUPPORTED_AUDIO_EXTENSIONS:
+
+        # Skip the .mp3 format itself
+        if extension == ".mp3":
+            continue
+
+        normalize_audio_file(extension, book_dir)
