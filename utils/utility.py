@@ -3,6 +3,7 @@ from rich.console import Console
 from rich.highlighter import NullHighlighter
 from pathlib import Path
 import subprocess
+import shutil
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -16,26 +17,75 @@ console = Console(
     highlighter=NullHighlighter(),
 )
 
-def log(message):
-    console.print(message)
+def log(message: str, indent: int = 0):
+    console.print(" " * indent + message)
 
 
-def log_info(message):
-    console.print(f"[bright_white][INFO][/bright_white] {message}")
+def log_info(message: str, indent: int = 0):
+    log(f"[bright_white][INFO][/bright_white] {message}", indent)
 
 
-def log_ok(message):
-    console.print(f"[bright_green][OK][/bright_green] {message}")
+def log_ok(message: str, indent: int = 0):
+    log(f"[bright_green][OK][/bright_green] {message}", indent)
 
 
-def log_error(message):
-    console.print(f"[bright_red][ERROR][/bright_red] {message}")
+def log_error(message: str, indent: int = 0):
+    console.print("\n" + " " * indent + f"[bright_red][ERROR][/bright_red] {message}\n")
+
+
+
+def log_warning(message: str, indent: int = 0):
+    console.print("\n" + " " * indent + f"[orange1][WARNING][/orange1] {message}\n")
+
+
+def log_file_error(message: str, log_path):
+    """
+    Write a processing error to a dedicated log file.
+    """
+    log_path = Path(log_path)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with log_path.open("w", encoding="utf-8") as file:
+        file.write(message.rstrip() + "\n")
+
+
+def run_ffmpeg(command, stderr_log_path, *, stdout=subprocess.PIPE, text=False):
+    """
+    Run FFmpeg while redirecting stderr to an operation-specific diagnostic log.
+
+    The log is truncated before each invocation so stale diagnostics from an
+    earlier run cannot affect the current status. Empty logs are removed after
+    the process finishes; non-empty logs are retained for inspection.
+
+    Returns
+    -------
+    tuple[subprocess.CompletedProcess, Path | None]
+        The completed process and the retained diagnostic-log path, or None
+        when FFmpeg produced no diagnostics.
+    """
+
+    stderr_log_path = Path(stderr_log_path)
+    stderr_log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    with stderr_log_path.open("w", encoding="utf-8") as log_file:
+        result = subprocess.run(
+            command,
+            stdout=stdout,
+            stderr=log_file,
+            text=text,
+        )
+
+    if stderr_log_path.stat().st_size == 0:
+        stderr_log_path.unlink()
+        return result, None
+
+    return result, stderr_log_path
 
 
 def rich_divider(char="-", label=None, head_tail=["", ""]):
     label_text = f" {label} " if label else ""
     total_fill = (
-        const.line_width - len(label_text) - len(head_tail[0]) - len(head_tail[1])
+        const.LINE_WIDTH - len(label_text) - len(head_tail[0]) - len(head_tail[1])
     )
     half = total_fill // 2
     extra = total_fill % 2
@@ -46,15 +96,29 @@ def rich_divider(char="-", label=None, head_tail=["", ""]):
 
 
 def format_time(elapsed_time):
+    """
+    Format a duration for display.
+
+    Durations below one second are displayed with
+    millisecond precision so that very short audio files
+    are not misleadingly shown as 0s.
+    """
+
+    if elapsed_time < 1:
+        return f"{elapsed_time:.3f}s"
+
     seconds = int(elapsed_time)
     minutes, seconds = divmod(seconds, 60)
     hours, minutes = divmod(minutes, 60)
 
     parts = []
+
     if hours > 0:
         parts.append(f"{hours}h")
+
     if minutes > 0 or hours > 0:
         parts.append(f"{minutes}m")
+
     if seconds > 0 or (hours == 0 and minutes == 0):
         parts.append(f"{seconds}s")
 
@@ -67,10 +131,11 @@ def print_filter_chain(filter_chain):
         "afftdn": "noise reduction",
     }
 
-    print(" " * 6, "Filter\t\t:")
+    
+    log("Filter\t\t:", indent=const.INDENT_FILE)
 
     if not filter_chain:
-        print(" " * 26, "No processing required")
+        log("No processing required", indent=const.INDENT_PHASE+6)
         return
 
     for filter_part in filter_chain.split(","):
@@ -81,7 +146,8 @@ def print_filter_chain(filter_chain):
             filter_name,
         )
 
-        print(" " * 26, display_name)
+        log(display_name, indent=const.INDENT_PHASE+6)
+    print()
 
 def start_msg():
 
@@ -154,6 +220,178 @@ def print_parameters(book_path: str):
     const.AUDIO_FILES = audio_files
     est_time_str = get_est_time_str(book_path)
 
-    log(f"Directory\t: [orange3]{book_path}[/orange3]")
+    log(f"Directory\t: [grey50]{book_path}[/grey50]")
     print(f"No. of Files\t: {len(audio_files)}")
     log(f"Estimated time\t: [sea_green1]{est_time_str}[/sea_green1]")
+
+
+def cleanup(book_path):
+    """
+    Finalize an audiobook after all processing phases have completed.
+
+    Cleanup is performed only when every log subdirectory is empty.
+
+    If any diagnostic/error log exists:
+        - Do nothing.
+        - Source files remain intact.
+        - Standardized_Audiobook remains intact.
+        - Logs remain intact.
+
+    If all log directories are empty:
+        1. Remove all source audio files from the book directory.
+        2. Remove the logs directory.
+        3. Move the contents of Standardized_Audiobook into the book directory.
+        4. Remove the now-empty Standardized_Audiobook directory.
+
+    Returns
+    -------
+    bool
+        True  -> cleanup completed.
+        False -> cleanup was skipped or failed.
+    """
+
+    book_path = Path(book_path)
+
+    if not book_path.is_dir():
+        log_error(f"Cleanup failed: directory does not exist: {book_path}")
+        return False
+
+    # ========================================================
+    # DIRECTORIES
+    # ========================================================
+
+    logs_dir = book_path / "logs"
+    standardized_dir = const.STANDARDIZED_BOOK_PATH
+
+    # ========================================================
+    # VERIFY LOG DIRECTORY
+    # ========================================================
+
+    if not logs_dir.is_dir():
+        log_error(f"Cleanup aborted: logs directory not found: {logs_dir}")
+        return False
+
+    # --------------------------------------------------------
+    # Check every item inside every log subdirectory.
+    #
+    # Any file means an error/diagnostic exists.
+    # We deliberately check recursively so that even a file
+    # accidentally placed inside a nested directory prevents
+    # destructive cleanup.
+    # --------------------------------------------------------
+
+    log_files = []
+
+    for path in logs_dir.rglob("*"):
+
+        if path.is_file():
+            log_files.append(path)
+
+    if log_files:
+
+        log_warning(
+            f"Cleanup skipped: {len(log_files)} log file(s) "
+            f"found in {logs_dir}."
+        )
+
+        return False
+
+    # ========================================================
+    # VERIFY STANDARDIZED AUDIOBOOK
+    # ========================================================
+
+    if not standardized_dir.is_dir():
+        log_error(
+            "Cleanup aborted: Standardized_Audiobook directory "
+            "was not found."
+        )
+        return False
+
+    # ========================================================
+    # FIND SOURCE AUDIO FILES
+    # ========================================================
+
+    source_files = [
+        path
+        for path in book_path.iterdir()
+        if (
+            path.is_file()
+            and path.suffix.lower() in const.SUPPORTED_AUDIO_EXTENSIONS
+        )
+    ]
+
+    # ========================================================
+    # REMOVE SOURCE AUDIO
+    # ========================================================
+
+    try:
+
+        for source_file in source_files:
+            source_file.unlink()
+
+    except Exception as error:
+
+        log_error(
+            f"Cleanup failed while removing source audio: {error}"
+        )
+
+        return False
+
+    # ========================================================
+    # REMOVE LOGS
+    # ========================================================
+
+    try:
+
+        shutil.rmtree(logs_dir)
+
+    except Exception as error:
+
+        log_error(
+            f"Cleanup failed while removing logs directory: {error}"
+        )
+
+        return False
+
+    # ========================================================
+    # MOVE STANDARDIZED AUDIOBOOK CONTENTS
+    # ========================================================
+
+    try:
+
+        for item in standardized_dir.iterdir():
+
+            destination = book_path / item.name
+
+            # This should normally never happen because the source
+            # audio files were removed above, but don't overwrite
+            # anything accidentally.
+            if destination.exists():
+
+                log_error(
+                    f"Cleanup aborted: destination already exists: "
+                    f"{destination}"
+                )
+
+                return False
+
+            shutil.move(str(item), str(destination))
+
+        # Remove the now-empty directory.
+        standardized_dir.rmdir()
+
+    except Exception as error:
+
+        log_error(
+            f"Cleanup failed while moving standardized audio: {error}"
+        )
+
+        return False
+
+    # ========================================================
+    # SUCCESS
+    # ========================================================
+
+    log_ok(" Audiobook cleanup completed.")
+
+    return True

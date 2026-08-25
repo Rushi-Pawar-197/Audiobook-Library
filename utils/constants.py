@@ -1,7 +1,7 @@
 # constants for Ausiobook formatting module
 
 
-BOOK_DIR = "/home/rushikesh/Audiobooks/Unprocessed/Foundation/7 - Foundation And Earth/"
+BOOK_DIR = "/home/rushikesh/Audiobooks/Unprocessed/test/"
 
 COVER_PATH = "/home/rushikesh/Audiobooks/covers/Foundation/F7.png"
 
@@ -14,15 +14,28 @@ ALBUM = "Foundation And Earth"
 
 
 
-
 # Logging constants
 
-line_width = 115
+INDENT_FILE = 6
+INDENT_FILE_LOG = INDENT_FILE - 1
+INDENT_PHASE = 20
+LINE_WIDTH = 90
+
+# Logging DIR constants
+
+LOGS_ANALYSIS = "logs/phase1_analysis/"
+LOGS_CLEANING = "logs/phase1_cleaning/"
+LOGS_CONVERSION = "logs/phase2_conversion/"
+
+
+
 
 # other_constants
 
 AUDIO_FILES = 0
+ERR_FILE_REJECTED = False
 
+STANDARDIZED_BOOK_PATH = BOOK_DIR + "Standardized_Audiobook"
 
 # Audio conversion consts
 

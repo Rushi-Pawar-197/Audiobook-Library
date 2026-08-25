@@ -32,6 +32,12 @@ new_BOOK_DIR = os.path.join(book_dir, "Standardized_Audiobook")
 
 converter.normalize_audiobook(new_BOOK_DIR)
 
+# sys.exit(0)
+
 meta.update_metadata(new_BOOK_DIR, cover_path, artist, album)
+
+final_cleanup_executed = util.cleanup(const.BOOK_DIR)
+
+# print("Final cleanup executed : ", final_cleanup_executed)
 
 util.log_ok(" Program execution successful.")

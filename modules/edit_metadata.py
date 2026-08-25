@@ -14,8 +14,8 @@ from mutagen.easyid3 import EasyID3
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from utils import constants as const
 from utils import utility as util
+from utils import constants as const
 
 
 def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
@@ -37,9 +37,9 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
 
 
     print()
-    print("=" * 70)
-    util.log(" " * 20+"[bold][dark_turquoise]PHASE 3 : METADATA[/bold][/dark_turquoise]")
-    print("=" * 70, "\n")
+    util.rich_divider(char="=")
+    util.log("[bold][dark_turquoise]PHASE 3 : METADATA[/bold][/dark_turquoise]", indent=const.INDENT_PHASE)
+    util.rich_divider(char="=")
     
 
     book_dir = Path(book_dir)
@@ -64,7 +64,7 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
     if cover_path.exists():
         cover_bytes = cover_path.read_bytes()
     else:
-        print("⚠️ Cover image not found. Continuing without cover.")
+        util.log_warning(" Cover image not found. Continuing without cover.", indent=const.INDENT_FILE_LOG)
 
     # print(
     #     f"Found {len(mp3s)} MP3 files. "
@@ -139,16 +139,14 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
             os.replace(tmp, src)
             force_rw(src)
 
-            util.log(
-                f"[cyan1][{idx}/{3}][/cyan1]\n"
-                f"{' ' * 6}{src.name}\n"
-                f"{' ' * 6}title:\t'{title}'\n"
-                f"{' ' * 6}track:\t{track_num}\n"
-            )
+            util.log(f"[cyan1][{idx}/{len(mp3s)}][/cyan1]\n")
+            util.log(f"{src.name}\n\n", indent=const.INDENT_FILE)
+            util.log(f"title:\t'{title}'", indent=const.INDENT_FILE)
+            util.log(f"track:\t{track_num}\n", indent=const.INDENT_FILE)
 
         except Exception as e:
             if tmp.exists():
                 tmp.unlink(missing_ok=True)
-            util.log_error(f" {src.name}: {e}")
+            util.log_error(f" {src.name}: {e}", indent=const.INDENT_FILE_LOG)
 
     util.log_ok(" Metadata written.")

@@ -85,16 +85,22 @@ def load_audio_for_analysis(file_path, sample_rate=16000):
     """
     Decode audio through FFmpeg.
 
+    FFmpeg diagnostics are stored separately for this operation.
+    Recoverable decoder diagnostics are retained as a warning; a failed
+    decode still raises an error and stops processing of this file.
+
     We use mono 16 kHz because this is more than enough
     for the measurements we currently need.
     """
+
+    file_path = Path(file_path)
 
     command = [
         "ffmpeg",
         "-v",
         "error",
         "-i",
-        file_path,
+        str(file_path),
         "-ac",
         "1",
         "-ar",
@@ -104,12 +110,36 @@ def load_audio_for_analysis(file_path, sample_rate=16000):
         "-",
     ]
 
-    result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stderr_log = os.path.join(file_path.parent, const.LOGS_ANALYSIS, f"{file_path.name}.stderr")
+
+    result, diagnostic_log = util.run_ffmpeg(
+        command,
+        stderr_log,
+        stdout=subprocess.PIPE,
+    )
 
     if result.returncode != 0:
-        raise RuntimeError(result.stderr.decode(errors="replace"))
+        log_location = f" See {diagnostic_log}." if diagnostic_log else ""
+        raise RuntimeError(f"FFmpeg audio analysis failed.{log_location}")
+
+    if diagnostic_log is not None:
+        util.log_warning(
+            f"FFmpeg reported decoding issues while analyzing {file_path.name}. "
+            f"See {diagnostic_log}.\n",
+            indent=const.INDENT_FILE_LOG
+        )
 
     audio = np.frombuffer(result.stdout, dtype=np.float32)
+
+    if len(audio) == 0:
+        raise ValueError("Audio decoding produced no samples.")
+
+    duration = len(audio) / sample_rate
+
+    if duration < 1.0:
+        raise ValueError(
+            f"Audio is too short for DSP analysis ({duration:.3f} seconds)."
+        )
 
     return audio, sample_rate
 
@@ -345,7 +375,7 @@ def band_energy(frequencies, spectrum_db, low, high):
     mask = (frequencies >= low) & (frequencies < high)
 
     if not np.any(mask):
-        return None
+        return -120.0
 
     # Convert dB back to linear magnitude.
     linear = 10 ** (spectrum_db[mask] / 20)
@@ -633,7 +663,7 @@ def analyze_audio(file_path):
     if not os.path.isfile(file_path):
         raise FileNotFoundError(file_path)
 
-    print(" " * 6,f"{file_path.name}\n")
+    util.log(f"{file_path.name}\n", indent=const.INDENT_FILE)
 
     # --------------------------------------------------------
     # FILE INFORMATION
@@ -641,11 +671,15 @@ def analyze_audio(file_path):
 
     info = get_audio_info(file_path)
 
-    print(" " * 6,f"Duration\t\t:  {util.format_time(info['duration'])}")
 
-    print(" " * 6,f"Sample rate\t:  {info['sample_rate']} Hz")
+    if info["duration"] <= 0:
+        raise ValueError(
+            f"Invalid audio duration: {info['duration']} seconds."
+        )
 
-    print(" " * 6,f"Channels\t\t:  {info['channel_layout']}\n")    
+    util.log(f"Duration\t\t:  {util.format_time(info['duration'])}", indent=const.INDENT_FILE)
+    util.log(f"Sample rate\t:  {info['sample_rate']} Hz", indent=const.INDENT_FILE)
+    util.log(f"Channels\t\t:  {info['channel_layout']}\n", indent=const.INDENT_FILE)
 
     # --------------------------------------------------------
     # LOAD AUDIO
@@ -999,7 +1033,9 @@ def clean_audio(
     # CREATE OUTPUT DIRECTORY
     # --------------------------------------------------------
 
-    output_dir = input_file.parent / "Standardized_Audiobook"
+    const.STANDARDIZED_BOOK_PATH = input_file.parent / "Standardized_Audiobook"
+
+    output_dir = Path(const.STANDARDIZED_BOOK_PATH)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     # output_file = output_dir / input_file.name
@@ -1042,11 +1078,11 @@ def clean_audio(
     # DISPLAY DECISION
     # --------------------------------------------------------
 
+    util.log(f"Noise severity   :  {noise_severity:.3f}", indent=const.INDENT_FILE)
+    util.log(f"Hum severity     :  {hum_severity:.3f}", indent=const.INDENT_FILE)
+    util.log(f"Overall severity :  {overall_severity:.3f}\n", indent=const.INDENT_FILE)
+    util.log(f"Processing level :  {processing_level}\n", indent=const.INDENT_FILE)
 
-    print(" " * 6,f"Noise severity   :  {noise_severity:.3f}")
-    print(" " * 6,f"Hum severity     :  {hum_severity:.3f}")
-    print(" " * 6,f"Overall severity :  {overall_severity:.3f}\n")
-    print(" " * 6,f"Processing level :  {processing_level}\n")
 
     util.print_filter_chain(filter_chain)
 
@@ -1055,7 +1091,7 @@ def clean_audio(
     # --------------------------------------------------------
 
     if not filter_chain:
-        util.log("\n"+" " * 5+"[bright_green][OK][/bright_green] No cleaning required.")
+        util.log_ok("No cleaning required.", indent=const.INDENT_FILE_LOG)
 
         output_file = output_dir / input_file.name
 
@@ -1064,12 +1100,11 @@ def clean_audio(
 
         except Exception as error:
             print()
-            util.log_error(" Could not copy audio file.")
-            print(error)
+            util.log_error(f"Could not copy audio file -> {error}", indent=const.INDENT_FILE_LOG)
 
             return False
 
-        util.log("\n"+" " * 5+"[bright_green][OK][/bright_green] Audio copied as it is.")
+        util.log_ok("Audio copied as it is.", indent=const.INDENT_FILE_LOG)
 
         return True
 
@@ -1100,19 +1135,38 @@ def clean_audio(
     # RUN FFMPEG
     # --------------------------------------------------------
 
-    try:
+    stderr_log = os.path.join(input_file.parent, const.LOGS_CLEANING, f"{input_file.name}.stderr")
+    
 
-        subprocess.run(command, check=True)
+    result, diagnostic_log = util.run_ffmpeg(
+        command,
+        stderr_log,
+    )
 
-    except subprocess.CalledProcessError as error:
-
+    if result.returncode != 0:
         print()
-        util.log_error(" FFmpeg audio cleaning failed.")
-        print(error)
+        util.log_error("FFmpeg audio cleaning failed.", indent=const.INDENT_FILE_LOG)
+        if diagnostic_log is not None:
+            util.log(f" See {diagnostic_log}", indent=const.INDENT_FILE_LOG)
 
         return False
 
-    util.log("\n"+" " * 5+f"[bright_green][OK][/bright_green] Cleaned → {output_file.name}")
+    if not output_file.exists():
+        print()
+        util.log_error(" FFmpeg audio cleaning completed without producing the output file.", indent=const.INDENT_FILE_LOG)
+        if diagnostic_log is not None:
+            util.log(f" See {diagnostic_log}", indent=const.INDENT_FILE_LOG)
+
+        return False
+
+    if diagnostic_log is not None:
+        util.log_warning(
+            f"FFmpeg reported decoding issues while cleaning {input_file.name}. "
+            f"See {diagnostic_log}.\n",
+            indent=const.INDENT_FILE_LOG
+        )
+
+    util.log_ok(f"Cleaned → {output_file.name}",indent=const.INDENT_FILE_LOG)
 
     return True
 
@@ -1121,35 +1175,78 @@ def clean_audio(
 # PROCESS ONE AUDIO FILE
 # ============================================================
 
-
 def process_audio_file(audio_file):
     """
     Run the complete audiobook audio-cleaning pipeline
     for a single audio file.
 
     Stage 1 → Stage 2 → Stage 3
+
+    A failure in one audio file does not stop the
+    audiobook processing operation.
     """
 
-    # --------------------------------------------------------
-    # STAGE 1 — ANALYZE AUDIO
-    # --------------------------------------------------------
-
-    analysis = analyze_audio(str(audio_file))
+    audio_file = Path(audio_file)
 
     # --------------------------------------------------------
-    # STAGE 2 — DETERMINE PROCESSING LEVEL
+    # ERROR LOG PATH
     # --------------------------------------------------------
 
-    processing_decision = determine_processing_level(analysis)
+    error_log = (
+        audio_file.parent
+        / const.LOGS_ANALYSIS
+        / f"{audio_file.name}.error"
+    )
 
-    # --------------------------------------------------------
-    # STAGE 3 — CLEAN AUDIO
-    # --------------------------------------------------------
+    try:
 
-    success = clean_audio(str(audio_file), processing_decision, analysis)
+        # ----------------------------------------------------
+        # STAGE 1 — ANALYZE AUDIO
+        # ----------------------------------------------------
 
-    return success
+        analysis = analyze_audio(str(audio_file))
 
+        # ----------------------------------------------------
+        # STAGE 2 — DETERMINE PROCESSING LEVEL
+        # ----------------------------------------------------
+
+        processing_decision = determine_processing_level(analysis)
+
+        # ----------------------------------------------------
+        # STAGE 3 — CLEAN AUDIO
+        # ----------------------------------------------------
+
+        success = clean_audio(
+            str(audio_file),
+            processing_decision,
+            analysis,
+        )
+
+        return success
+
+    except Exception as error:
+
+        error_message = (
+            f"Audio processing failed for: {audio_file.name}\n"
+            f"Error: {type(error).__name__}: {error}"
+        )
+
+        # Terminal
+        print()
+        util.log_error(
+            f"processing {audio_file.name}: {error}",
+            indent=const.INDENT_FILE_LOG,
+        )
+
+        const.ERR_FILE_REJECTED = True
+
+        # Persistent error log
+        util.log_file_error(
+            error_message,
+            error_log,
+        )
+
+        return False
 
 # ============================================================
 # PROCESS AUDIOBOOK DIRECTORY
@@ -1177,9 +1274,9 @@ def audiobook_cleaning(book_path):
     audio_files = const.AUDIO_FILES
 
     print()
-    print("=" * 70)
-    util.log(" " * 20+"[bold][dark_turquoise]PHASE 1 : AUDIO CLEANING[/dark_turquoise][/bold]")
-    print("=" * 70, "\n")
+    util.rich_divider(char="=")
+    util.log("[bold][dark_turquoise]PHASE 1 : AUDIO CLEANING[/dark_turquoise][/bold]", indent=const.INDENT_PHASE)
+    util.rich_divider(char="=")
 
     # --------------------------------------------------------
     # PROCESS EACH FILE
@@ -1207,18 +1304,17 @@ def audiobook_cleaning(book_path):
             failed += 1
 
             print()
-            util.log_error(f" processing  {audio_file.name}:")
-            print(error)
+            util.log_error(f" processing  {audio_file.name}: {error}", indent=const.INDENT_FILE_LOG)
 
     # --------------------------------------------------------
     # SUMMARY
     # --------------------------------------------------------
 
     print()
-    print("-" * 70)
+    util.rich_divider(char="=")
 
     util.log(f" Total      : [bold][white]{len(audio_files)}[/bold][/white]")
     util.log(f" Successful : [bold][green4]{successful}[/bold][/green4]")
     util.log(f" Failed     : [bold][red3]{failed}[/bold][/red3]")
 
-    print("-" * 70)
+    util.rich_divider(char="=")

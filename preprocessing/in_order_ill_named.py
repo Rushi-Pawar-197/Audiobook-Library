@@ -12,7 +12,8 @@ from utils import constants as const
 # Configuration
 # ============================================================
 
-DIRECTORY = Path("/home/rushikesh/Audiobooks/Unprocessed/TAS/")
+DIRECTORY = Path(const.STANDARDIZED_BOOK_PATH)
+
 
 start_index = 1
 
