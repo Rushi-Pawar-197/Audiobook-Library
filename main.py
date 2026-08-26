@@ -10,6 +10,11 @@ from utils import utility as util
 from modules import audio_dsp_cleaning as dsp
 from modules import audio_converter as converter
 from modules import edit_metadata as meta
+from preprocessing import preprocessing as prep
+
+import time
+
+start_T = time.time()
 
 # ========= CONFIG =========
 
@@ -22,9 +27,9 @@ cover_path = Path(const.COVER_PATH)
 
 util.start_msg()
 
-util.print_parameters(book_dir)
+prep.preprocessing_pipeline(book_dir)
 
-# sys.exit(0)
+util.print_parameters(book_dir)
 
 dsp.audiobook_cleaning(book_dir)
 
@@ -32,12 +37,13 @@ new_BOOK_DIR = os.path.join(book_dir, "Standardized_Audiobook")
 
 converter.normalize_audiobook(new_BOOK_DIR)
 
-# sys.exit(0)
-
 meta.update_metadata(new_BOOK_DIR, cover_path, artist, album)
 
 final_cleanup_executed = util.cleanup(const.BOOK_DIR)
 
-# print("Final cleanup executed : ", final_cleanup_executed)
-
 util.log_ok(" Program execution successful.")
+
+
+end_T = time.time()
+total_T = end_T - start_T
+print(f"\nTotal execution time: {util.format_time(total_T)}")

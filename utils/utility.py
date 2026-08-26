@@ -17,12 +17,13 @@ console = Console(
     highlighter=NullHighlighter(),
 )
 
+
 def log(message: str, indent: int = 0):
     console.print(" " * indent + message)
 
 
 def log_info(message: str, indent: int = 0):
-    log(f"[bright_white][INFO][/bright_white] {message}", indent)
+    log(f"[sea_green1][INFO][/sea_green1] {message}", indent)
 
 
 def log_ok(message: str, indent: int = 0):
@@ -31,7 +32,6 @@ def log_ok(message: str, indent: int = 0):
 
 def log_error(message: str, indent: int = 0):
     console.print("\n" + " " * indent + f"[bright_red][ERROR][/bright_red] {message}\n")
-
 
 
 def log_warning(message: str, indent: int = 0):
@@ -82,7 +82,7 @@ def run_ffmpeg(command, stderr_log_path, *, stdout=subprocess.PIPE, text=False):
     return result, stderr_log_path
 
 
-def rich_divider(char="-", label=None, head_tail=["", ""]):
+def rich_divider(char="-", label=None, head_tail=["", ""], colour="dark_turquoise"):
     label_text = f" {label} " if label else ""
     total_fill = (
         const.LINE_WIDTH - len(label_text) - len(head_tail[0]) - len(head_tail[1])
@@ -92,7 +92,7 @@ def rich_divider(char="-", label=None, head_tail=["", ""]):
     line = (
         f"{head_tail[0]}{char * half}{label_text}{char * (half + extra)}{head_tail[1]}"
     )
-    console.print(line)
+    console.print(f"[{colour}]{line}[/{colour}]")
 
 
 def format_time(elapsed_time):
@@ -124,6 +124,7 @@ def format_time(elapsed_time):
 
     return " ".join(parts)
 
+
 def print_filter_chain(filter_chain):
     filter_names = {
         "highpass": "highpass",
@@ -131,11 +132,10 @@ def print_filter_chain(filter_chain):
         "afftdn": "noise reduction",
     }
 
-    
     log("Filter\t\t:", indent=const.INDENT_FILE)
 
     if not filter_chain:
-        log("No processing required", indent=const.INDENT_PHASE+6)
+        log("No processing required", indent=const.INDENT_PHASE + 6)
         return
 
     for filter_part in filter_chain.split(","):
@@ -146,8 +146,9 @@ def print_filter_chain(filter_chain):
             filter_name,
         )
 
-        log(display_name, indent=const.INDENT_PHASE+6)
+        log(display_name, indent=const.INDENT_PHASE + 6)
     print()
+
 
 def start_msg():
 
@@ -165,18 +166,21 @@ def start_msg():
 
     log(start_log)
 
+
 def get_num_files(book_path: str):
     audio_files = sorted(
         file
         for file in book_path.iterdir()
         if (file.is_file() and file.suffix.lower() in const.SUPPORTED_AUDIO_EXTENSIONS)
     )
-    
+
     if not audio_files:
-        log_info(f" No supported audio files found in: " f"{book_path}")
+        log_error(f" No supported audio files found in: " f"{book_path}")
+        sys.exit(0)
         return
 
     return audio_files
+
 
 def get_est_time_str(directory):
     """
@@ -191,9 +195,12 @@ def get_est_time_str(directory):
 
         command = [
             "ffprobe",
-            "-v", "error",
-            "-show_entries", "format=duration",
-            "-of", "default=noprint_wrappers=1:nokey=1",
+            "-v",
+            "error",
+            "-show_entries",
+            "format=duration",
+            "-of",
+            "default=noprint_wrappers=1:nokey=1",
             str(file_path),
         ]
 
@@ -206,11 +213,14 @@ def get_est_time_str(directory):
 
         total_duration += float(result.stdout.strip())
 
-
-    calculated_est_time = int((104/2589) * total_duration) + total_duration/135 + 5 * len(const.AUDIO_FILES)
+    calculated_est_time = (
+        int((52 / 2589) * total_duration)
+        + total_duration / 135
+        + 5 * len(const.AUDIO_FILES)
+    )
 
     est_time_str = format_time(calculated_est_time)
-        
+
     return est_time_str
 
 
@@ -220,9 +230,38 @@ def print_parameters(book_path: str):
     const.AUDIO_FILES = audio_files
     est_time_str = get_est_time_str(book_path)
 
+    n_audio_files = len(audio_files)
+
+    print()
     log(f"Directory\t: [grey50]{book_path}[/grey50]")
-    print(f"No. of Files\t: {len(audio_files)}")
+    print(f"No. of Files\t: {n_audio_files}")
     log(f"Estimated time\t: [sea_green1]{est_time_str}[/sea_green1]")
+    print()
+
+
+def title_card(msg: str, type: str, char: str = "="):
+
+    colour = "bright_white" if type == "phase" else "dark_turquoise"
+
+    print()
+    rich_divider(char=char, colour=colour)
+    log(
+        f"[bold][{colour}]{msg}[/{colour}][/bold]",
+        indent=const.INDENT_PHASE,
+    )
+    rich_divider(char=char, colour=colour)
+    print()
+
+
+def batch_summary(total: int, successful: int, failed: int):
+
+    print()
+    rich_divider(char="=")
+    log(f" Total      : [bold][white]{total}[/bold][/white]")
+    log(f" Successful : [bold][green4]{successful}[/bold][/green4]")
+    log(f" Failed     : [bold][red3]{failed}[/bold][/red3]")
+    rich_divider(char="=")
+    print()
 
 
 def cleanup(book_path):
@@ -261,14 +300,14 @@ def cleanup(book_path):
     # ========================================================
 
     logs_dir = book_path / "logs"
-    standardized_dir = const.STANDARDIZED_BOOK_PATH
+    standardized_dir = Path(const.STANDARDIZED_BOOK_PATH)
 
     # ========================================================
     # VERIFY LOG DIRECTORY
     # ========================================================
 
     if not logs_dir.is_dir():
-        log_error(f"Cleanup aborted: logs directory not found: {logs_dir}")
+        log_info(f"Cleanup aborted: logs directory not found: {logs_dir}")
         return False
 
     # --------------------------------------------------------
@@ -290,8 +329,7 @@ def cleanup(book_path):
     if log_files:
 
         log_warning(
-            f"Cleanup skipped: {len(log_files)} log file(s) "
-            f"found in {logs_dir}."
+            f"Cleanup skipped: {len(log_files)} log file(s) " f"found in {logs_dir}."
         )
 
         return False
@@ -301,10 +339,7 @@ def cleanup(book_path):
     # ========================================================
 
     if not standardized_dir.is_dir():
-        log_error(
-            "Cleanup aborted: Standardized_Audiobook directory "
-            "was not found."
-        )
+        log_info("Cleanup aborted: Standardized_Audiobook directory " "was not found.")
         return False
 
     # ========================================================
@@ -314,10 +349,7 @@ def cleanup(book_path):
     source_files = [
         path
         for path in book_path.iterdir()
-        if (
-            path.is_file()
-            and path.suffix.lower() in const.SUPPORTED_AUDIO_EXTENSIONS
-        )
+        if (path.is_file() and path.suffix.lower() in const.SUPPORTED_AUDIO_EXTENSIONS)
     ]
 
     # ========================================================
@@ -331,9 +363,7 @@ def cleanup(book_path):
 
     except Exception as error:
 
-        log_error(
-            f"Cleanup failed while removing source audio: {error}"
-        )
+        log_warning(f"Cleanup failed while removing source audio: {error}")
 
         return False
 
@@ -341,16 +371,23 @@ def cleanup(book_path):
     # REMOVE LOGS
     # ========================================================
 
-    try:
+    cleanup_failed = False
 
+    try:
         shutil.rmtree(logs_dir)
 
     except Exception as error:
+        log_warning(f"Cleanup failed while removing logs directory: {error}")
+        cleanup_failed = True
 
-        log_error(
-            f"Cleanup failed while removing logs directory: {error}"
-        )
+    try:
+        shutil.rmtree(const.METADATA_PATH)
 
+    except Exception as error:
+        log_warning(f"Cleanup failed while removing metadata directory: {error}")
+        cleanup_failed = True
+
+    if cleanup_failed:
         return False
 
     # ========================================================
@@ -368,9 +405,8 @@ def cleanup(book_path):
             # anything accidentally.
             if destination.exists():
 
-                log_error(
-                    f"Cleanup aborted: destination already exists: "
-                    f"{destination}"
+                log_warning(
+                    f"Cleanup aborted: destination already exists: " f"{destination}"
                 )
 
                 return False
@@ -382,9 +418,7 @@ def cleanup(book_path):
 
     except Exception as error:
 
-        log_error(
-            f"Cleanup failed while moving standardized audio: {error}"
-        )
+        log_warning(f"Cleanup failed while moving standardized audio: {error}")
 
         return False
 
@@ -392,6 +426,6 @@ def cleanup(book_path):
     # SUCCESS
     # ========================================================
 
-    log_ok(" Audiobook cleanup completed.")
+    log_ok("Audiobook cleanup completed.")
 
     return True

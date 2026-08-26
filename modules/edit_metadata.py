@@ -35,12 +35,7 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
         m = re.search(r"\d+", title)
         return int(m.group()) if m else default
 
-
-    print()
-    util.rich_divider(char="=")
-    util.log("[bold][dark_turquoise]PHASE 3 : METADATA[/bold][/dark_turquoise]", indent=const.INDENT_PHASE)
-    util.rich_divider(char="=")
-    
+    util.title_card("PHASE 3 : METADATA", type="phase", char="=")
 
     book_dir = Path(book_dir)
     cover_path = Path(cover_path)
@@ -64,7 +59,10 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
     if cover_path.exists():
         cover_bytes = cover_path.read_bytes()
     else:
-        util.log_warning(" Cover image not found. Continuing without cover.", indent=const.INDENT_FILE_LOG)
+        util.log_warning(
+            " Cover image not found. Continuing without cover.",
+            indent=const.INDENT_FILE_LOG,
+        )
 
     # print(
     #     f"Found {len(mp3s)} MP3 files. "
@@ -140,7 +138,7 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
             force_rw(src)
 
             util.log(f"[cyan1][{idx}/{len(mp3s)}][/cyan1]\n")
-            util.log(f"{src.name}\n\n", indent=const.INDENT_FILE)
+            util.log(f"{src.name}\n", indent=const.INDENT_FILE)
             util.log(f"title:\t'{title}'", indent=const.INDENT_FILE)
             util.log(f"track:\t{track_num}\n", indent=const.INDENT_FILE)
 

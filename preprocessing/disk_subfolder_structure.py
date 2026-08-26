@@ -10,13 +10,6 @@ from utils import constants as const
 from utils import utility as util
 
 # ============================================================
-# Configuration
-# ============================================================
-
-BOOK_DIR = Path("/home/rushikesh/Audiobooks/Unprocessed/TAS/")
-
-
-# ============================================================
 # Natural sorting
 # ============================================================
 
@@ -24,18 +17,7 @@ BOOK_DIR = Path("/home/rushikesh/Audiobooks/Unprocessed/TAS/")
 def natural_key(path):
     """
     Sort filenames/folder names naturally.
-
-    Examples:
-
-        part 1
-        part 2
-        part 10
-
-    instead of alphabetical sorting:
-
-        part 1
-        part 10
-        part 2
+    Example: "part 2" comes before "part 10"
     """
 
     return [
@@ -55,24 +37,6 @@ def get_subfolders(book_dir):
     in natural order.
 
     No naming convention is assumed.
-
-    Examples that all work:
-
-        D01/
-        D02/
-        D03/
-
-        Disk 1/
-        Disk 2/
-        Disk 10/
-
-        part 1/
-        part 2/
-        part 10/
-
-        CD 1/
-        CD 2/
-        CD 10/
 
     The program does not care what the folders are called.
     Their natural order determines their processing order.
@@ -125,7 +89,9 @@ def create_temp_path(path, index):
 # ============================================================
 
 
-def organize_audiobook():
+def organize_audiobook(book_dir: Path):
+
+    BOOK_DIR = book_dir
 
     if not BOOK_DIR.exists():
         raise FileNotFoundError(f"Book directory does not exist:\n{BOOK_DIR}")
@@ -139,6 +105,7 @@ def organize_audiobook():
     if not folders:
         raise RuntimeError(f"No subdirectories found in:\n{BOOK_DIR}")
 
+    print()
     util.log_info(" Source folders found:")
 
     for index, folder in enumerate(folders, start=1):
@@ -156,7 +123,9 @@ def organize_audiobook():
 
     for folder_index, folder in enumerate(folders, start=1):
 
+        print()
         util.log_info(f" Processing folder {folder_index}: " f"{folder.name}")
+        print()
 
         audio_files = get_audio_files(folder)
 
@@ -194,8 +163,6 @@ def organize_audiobook():
 
     try:
 
-        util.log_info(" Preparing files...")
-
         for index, (source, destination) in enumerate(files_to_rename, start=1):
 
             temporary = create_temp_path(source, index)
@@ -215,9 +182,6 @@ def organize_audiobook():
         # Move temporary files to final names.
         # ----------------------------------------------------
 
-        print()
-        util.log_info(" Finalizing names...")
-
         for temporary, destination, _ in temporary_files:
 
             if destination.exists():
@@ -228,9 +192,6 @@ def organize_audiobook():
         # ----------------------------------------------------
         # Remove empty source folders
         # ----------------------------------------------------
-
-        print()
-        util.log_info(" Removing empty source folders...")
 
         for folder in folders:
 
@@ -248,9 +209,10 @@ def organize_audiobook():
         total_parts = len(files_to_rename)
 
         print()
-        util.log_ok(" Audiobook organization complete.")
-        util.log_ok(f"\nTotal parts   : {total_parts}")
-        util.log_ok(f"Book directory: {BOOK_DIR}")
+        util.log_ok("Preprocessing sequence complete")
+        util.log_ok(f"Total files   : {total_parts}")
+        print()
+        util.rich_divider(char="-")
 
     except Exception:
 
@@ -259,7 +221,7 @@ def organize_audiobook():
         # ----------------------------------------------------
 
         print()
-        util.log_error(" Processing failed. " "Attempting rollback...")
+        util.log_error("Processing failed. " "Attempting rollback...")
 
         for temporary, _, original_source in reversed(temporary_files):
 

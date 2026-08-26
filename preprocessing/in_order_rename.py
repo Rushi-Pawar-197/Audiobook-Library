@@ -7,15 +7,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from utils import constants as const
-
-# ============================================================
-# Configuration
-# ============================================================
-
-DIRECTORY = Path(const.STANDARDIZED_BOOK_PATH)
-
-
-start_index = 1
+from utils import utility as util
 
 
 def natural_key(path):
@@ -48,7 +40,9 @@ def get_audio_files(directory):
 # ============================================================
 
 
-def rename_audiobook():
+def rename_audiobook(directory: Path, start_index: int = 1):
+
+    DIRECTORY = directory
 
     if not DIRECTORY.exists():
         raise FileNotFoundError(f"Directory does not exist:\n{DIRECTORY}")
@@ -73,6 +67,7 @@ def rename_audiobook():
         rename_operations.append((source_file, destination_file))
 
         print(f"{source_file.name}" f"  ->  {new_filename}")
+    print()
 
     # --------------------------------------------------------
     # Phase 1:
@@ -88,9 +83,6 @@ def rename_audiobook():
     temporary_files = []
 
     try:
-
-        print()
-        print("Preparing files...")
 
         for index, (source, destination) in enumerate(rename_operations, start=1):
 
@@ -108,8 +100,6 @@ def rename_audiobook():
         # Rename temporary files to final names.
         # ----------------------------------------------------
 
-        print("Finalizing names...")
-
         for temporary, destination, _ in temporary_files:
 
             if destination.exists():
@@ -122,12 +112,10 @@ def rename_audiobook():
         # ----------------------------------------------------
 
         print()
-        print("=" * 60)
-        print("Audiobook preprocessing complete!")
-        print(f"Files processed : {len(files)}")
-        print(f"Starting index  : {start_index}")
-        print(f"Directory       : {DIRECTORY}")
-        print("=" * 60)
+        util.log_ok("Preprocessing sequence complete")
+        util.log_ok(f"Total files   : {len(rename_operations)}")
+        print()
+        util.rich_divider(char="-")
 
     except Exception:
 

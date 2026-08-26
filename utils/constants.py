@@ -1,17 +1,13 @@
 # constants for Ausiobook formatting module
 
 
-BOOK_DIR = "/home/rushikesh/Audiobooks/Unprocessed/test/"
+BOOK_DIR = "/home/rushikesh/Audiobooks/Unprocessed/time test/test_book/"
 
 COVER_PATH = "/home/rushikesh/Audiobooks/covers/Foundation/F7.png"
 
 ARTIST = "Isaac Asimov"
 
 ALBUM = "Foundation And Earth"
-
-
-
-
 
 
 # Logging constants
@@ -21,13 +17,13 @@ INDENT_FILE_LOG = INDENT_FILE - 1
 INDENT_PHASE = 20
 LINE_WIDTH = 90
 
-# Logging DIR constants
+METADATA_PATH = "metadata/"
 
+# Logging DIR constants
+LOGS_DIR = "logs/"
 LOGS_ANALYSIS = "logs/phase1_analysis/"
 LOGS_CLEANING = "logs/phase1_cleaning/"
-LOGS_CONVERSION = "logs/phase2_conversion/"
-
-
+LOGS_CONVERSION = "logs/conversion/"
 
 
 # other_constants

@@ -110,7 +110,9 @@ def load_audio_for_analysis(file_path, sample_rate=16000):
         "-",
     ]
 
-    stderr_log = os.path.join(file_path.parent, const.LOGS_ANALYSIS, f"{file_path.name}.stderr")
+    stderr_log = os.path.join(
+        file_path.parent, const.LOGS_ANALYSIS, f"{file_path.name}.stderr"
+    )
 
     result, diagnostic_log = util.run_ffmpeg(
         command,
@@ -126,7 +128,7 @@ def load_audio_for_analysis(file_path, sample_rate=16000):
         util.log_warning(
             f"FFmpeg reported decoding issues while analyzing {file_path.name}. "
             f"See {diagnostic_log}.\n",
-            indent=const.INDENT_FILE_LOG
+            indent=const.INDENT_FILE_LOG,
         )
 
     audio = np.frombuffer(result.stdout, dtype=np.float32)
@@ -245,12 +247,17 @@ def find_stable_quiet_sections(audio, sample_rate, window_seconds=1.0):
     Stable quiet regions are more likely to represent the
     actual background noise rather than speech tails,
     breaths, clicks, etc.
+
+    The returned tuple also contains the RMS energy of the
+    selected quiet material so callers do not need to scan
+    the selected samples a second time just to calculate the
+    noise floor.
     """
 
     window_size = int(sample_rate * window_seconds)
 
     if len(audio) < window_size:
-        return audio
+        return audio, dbfs(audio)
 
     measurements = []
 
@@ -258,7 +265,15 @@ def find_stable_quiet_sections(audio, sample_rate, window_seconds=1.0):
 
         window = audio[start : start + window_size]
 
-        level = dbfs(window)
+        # Calculate the window energy once.  The same energy
+        # is reused for the window RMS and, when this window is
+        # selected, the final quiet-section RMS.
+        mean_square = np.mean(window**2)
+
+        if mean_square <= 1e-24:
+            level = -120.0
+        else:
+            level = 10 * math.log10(mean_square)
 
         # Divide the window into smaller pieces.
         sub_size = max(1, window_size // 10)
@@ -269,7 +284,12 @@ def find_stable_quiet_sections(audio, sample_rate, window_seconds=1.0):
 
             sub = window[sub_start : sub_start + sub_size]
 
-            sub_levels.append(dbfs(sub))
+            sub_mean_square = np.mean(sub**2)
+
+            if sub_mean_square <= 1e-24:
+                sub_levels.append(-120.0)
+            else:
+                sub_levels.append(10 * math.log10(sub_mean_square))
 
         variation = max(sub_levels) - min(sub_levels)
 
@@ -279,6 +299,7 @@ def find_stable_quiet_sections(audio, sample_rate, window_seconds=1.0):
                 "end": start + window_size,
                 "level": level,
                 "variation": variation,
+                "mean_square": mean_square,
             }
         )
 
@@ -311,7 +332,7 @@ def find_stable_quiet_sections(audio, sample_rate, window_seconds=1.0):
 
     # Still nothing useful?
     if not candidates:
-        return audio
+        return audio, dbfs(audio)
 
     # --------------------------------------------------------
     # Use several quiet sections rather than one.
@@ -325,7 +346,17 @@ def find_stable_quiet_sections(audio, sample_rate, window_seconds=1.0):
         [audio[item["start"] : item["end"]] for item in selected]
     )
 
-    return quiet_audio
+    # All selected windows have the same size, so the RMS of
+    # their concatenation is the square root of the mean of
+    # their already-calculated mean-square values.
+    quiet_mean_square = np.mean([item["mean_square"] for item in selected])
+
+    if quiet_mean_square <= 1e-24:
+        quiet_rms = -120.0
+    else:
+        quiet_rms = 10 * math.log10(quiet_mean_square)
+
+    return quiet_audio, quiet_rms
 
 
 # ============================================================
@@ -425,34 +456,19 @@ def analyze_frequency_bands(audio, sample_rate):
 # ============================================================
 
 
-def calculate_hum_strength(audio, sample_rate, frequency):
+def calculate_hum_spectrum(audio, sample_rate):
     """
-    Measure how much a specific frequency stands out
-    compared with its immediate neighboring frequencies.
+    Prepare the FFT spectrum used by hum detection.
 
-    This is better for hum detection than comparing the
-    frequency against the strongest frequency in the entire
-    recording.
-
-    Returns:
-        {
-            "frequency_level_db": ...,
-            "neighbor_level_db": ...,
-            "prominence_db": ...
-        }
-
-    'prominence_db' tells us how much the target frequency
-    stands out from its surroundings.
+    All hum measurements use the same audio, sample rate,
+    30-second limit, DC removal, Hann window, and FFT.
+    Calculate that shared spectrum once instead of repeating
+    the same work for every fundamental and harmonic.
     """
 
     if len(audio) == 0:
-        return {
-            "frequency_level_db": -120.0,
-            "neighbor_level_db": -120.0,
-            "prominence_db": 0.0,
-        }
+        return None, None
 
-    # Use up to 30 seconds.
     max_samples = min(len(audio), sample_rate * 30)
 
     audio = audio[:max_samples]
@@ -469,11 +485,20 @@ def calculate_hum_strength(audio, sample_rate, frequency):
 
     magnitude = np.abs(spectrum)
 
-    # --------------------------------------------------------
-    # Find the FFT bin closest to the target frequency.
-    # --------------------------------------------------------
+    return frequencies, magnitude
 
-    target_index = np.argmin(np.abs(frequencies - frequency))
+
+def calculate_hum_strength_from_spectrum(frequencies, magnitude, frequency):
+    """
+    Measure a specific hum frequency using a precomputed FFT spectrum.
+    """
+
+    if frequencies is None or magnitude is None:
+        return {
+            "frequency_level_db": -120.0,
+            "neighbor_level_db": -120.0,
+            "prominence_db": 0.0,
+        }
 
     # --------------------------------------------------------
     # Measure the target frequency.
@@ -525,6 +550,21 @@ def calculate_hum_strength(audio, sample_rate, frequency):
     }
 
 
+def calculate_hum_strength(audio, sample_rate, frequency):
+    """
+    Measure how much a specific frequency stands out
+    compared with its immediate neighboring frequencies.
+
+    This compatibility wrapper retains the original function
+    interface.  analyze_hum() uses the shared spectrum directly
+    so that repeated FFT calculations are avoided.
+    """
+
+    frequencies, magnitude = calculate_hum_spectrum(audio, sample_rate)
+
+    return calculate_hum_strength_from_spectrum(frequencies, magnitude, frequency)
+
+
 def analyze_hum(audio, sample_rate):
     """
     Detect possible 50 Hz or 60 Hz electrical hum.
@@ -544,13 +584,19 @@ def analyze_hum(audio, sample_rate):
 
     results = {}
 
+    # All fundamentals and harmonics use the exact same input
+    # signal and FFT preparation. Calculate that spectrum once.
+    frequencies, magnitude = calculate_hum_spectrum(audio, sample_rate)
+
     for fundamental in (50, 60):
 
         # ----------------------------------------------------
         # Fundamental
         # ----------------------------------------------------
 
-        fundamental_result = calculate_hum_strength(audio, sample_rate, fundamental)
+        fundamental_result = calculate_hum_strength_from_spectrum(
+            frequencies, magnitude, fundamental
+        )
 
         harmonics = []
 
@@ -565,7 +611,9 @@ def analyze_hum(audio, sample_rate):
             if frequency >= sample_rate / 2:
                 break
 
-            harmonic_result = calculate_hum_strength(audio, sample_rate, frequency)
+            harmonic_result = calculate_hum_strength_from_spectrum(
+                frequencies, magnitude, frequency
+            )
 
             harmonics.append(
                 {
@@ -671,13 +719,12 @@ def analyze_audio(file_path):
 
     info = get_audio_info(file_path)
 
-
     if info["duration"] <= 0:
-        raise ValueError(
-            f"Invalid audio duration: {info['duration']} seconds."
-        )
+        raise ValueError(f"Invalid audio duration: {info['duration']} seconds.")
 
-    util.log(f"Duration\t\t:  {util.format_time(info['duration'])}", indent=const.INDENT_FILE)
+    util.log(
+        f"Duration\t\t:  {util.format_time(info['duration'])}", indent=const.INDENT_FILE
+    )
     util.log(f"Sample rate\t:  {info['sample_rate']} Hz", indent=const.INDENT_FILE)
     util.log(f"Channels\t\t:  {info['channel_layout']}\n", indent=const.INDENT_FILE)
 
@@ -698,9 +745,7 @@ def analyze_audio(file_path):
     # NOISE FLOOR
     # --------------------------------------------------------
 
-    quiet_audio = find_stable_quiet_sections(audio, sample_rate)
-
-    noise_floor = dbfs(quiet_audio)
+    quiet_audio, noise_floor = find_stable_quiet_sections(audio, sample_rate)
 
     estimated_snr = overall_level - noise_floor
 
@@ -727,18 +772,22 @@ def analyze_audio(file_path):
     # --------------------------------------------------------
 
     return {
-        "file": file_path,
-        "info": info,
+        "file": file_path.name,
+        "technical": {
+            "duration": info["duration"],
+            "sample_rate": info["sample_rate"],
+            "channels": info["channels"],
+        },
         "levels": {
             "rms_dbfs": overall_level,
             "peak_dbfs": peak_level,
         },
         "noise": {
             "noise_floor_dbfs": noise_floor,
-            "estimated_snr_db": estimated_snr,
+            "snr_db": estimated_snr,
         },
-        "loudness": loudness,
         "hum": hum,
+        "loudness": loudness,
         "frequency_bands": bands,
     }
 
@@ -808,7 +857,7 @@ def determine_processing_level(analysis):
     evaluated and tuned during development.
     """
 
-    snr_db = analysis["noise"]["estimated_snr_db"]
+    snr_db = analysis["noise"]["snr_db"]
     hum_strength = analysis["hum"]["hum_strength"]
 
     # --------------------------------------------------------
@@ -1001,265 +1050,543 @@ def build_filter_chain(
 def clean_audio(
     input_file,
     processing_decision,
-    analysis,
 ):
     """
-    Stage 3 — Clean an audiobook audio file.
+    Stage 3 — Execute the processing plan for one audio file.
 
-    The cleaned file is written to an 'output' directory
-    located alongside the input file.
-
-    Parameters
-    ----------
-    input_file : str or Path
-        Original source audio file.
-
-    processing_decision : dict
-        Output from determine_processing_level().
-
-    analysis : dict
-        Output from analyze_audio().
-
-    Returns
-    -------
-    bool
-        True if processing succeeded.
-        False if FFmpeg failed.
+    Stage 3 deliberately consumes only Stage 2 processing metadata.
+    It does not re-analyze the source or make processing decisions.
     """
 
     input_file = Path(input_file)
-
-    # --------------------------------------------------------
-    # CREATE OUTPUT DIRECTORY
-    # --------------------------------------------------------
 
     const.STANDARDIZED_BOOK_PATH = input_file.parent / "Standardized_Audiobook"
 
     output_dir = Path(const.STANDARDIZED_BOOK_PATH)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # output_file = output_dir / input_file.name
-    output_file = output_dir / f"{input_file.stem}.wav"
+    cleaning = processing_decision["cleaning"]
 
-    # --------------------------------------------------------
-    # READ STAGE 2 DECISION
-    # --------------------------------------------------------
+    processing_level = cleaning["level"]
+    noise_reduction = cleaning["noise_reduction_db"]
+    hum_reduction = cleaning["hum_reduction_db"]
+    highpass = cleaning["highpass_hz"]
+    detected_hum = cleaning.get("hum_frequency_hz")
+    loudness = processing_decision.get("loudness") or {}
+    gain_db = float(loudness.get("gain_db") or 0.0)
 
-    processing_level = processing_decision["processing_level"]
+    filters = []
 
-    noise_severity = processing_decision["noise_severity"]
+    if highpass is not None:
+        filters.append(f"highpass=f={highpass}")
 
-    hum_severity = processing_decision["hum_severity"]
+    if hum_reduction > 0 and detected_hum is not None:
+        filters.append(f"equalizer=f={detected_hum}:t=q:w=2:g=-{hum_reduction}")
 
-    overall_severity = processing_decision["overall_severity"]
+    if noise_reduction > 0:
+        filters.append(f"afftdn=nr={noise_reduction}:tn=1")
 
-    # --------------------------------------------------------
-    # READ STAGE 1 HUM INFORMATION
-    # --------------------------------------------------------
+    # Loudness gain is deliberately last so the Stage 2 decision applies
+    # after the conventional cleaning filters.
+    if abs(gain_db) > 0.001:
+        filters.append(f"volume={gain_db:+.2f}dB")
 
-    detected_hum = analysis["hum"].get("detected_hum")
+    filter_chain = ",".join(filters)
 
-    if detected_hum is not None:
-        detected_hum = str(detected_hum).replace("hz", "").strip()
-
-    # --------------------------------------------------------
-    # BUILD FILTER CHAIN
-    # --------------------------------------------------------
-
-    filter_chain = build_filter_chain(
-        processing_level=processing_level,
-        noise_severity=noise_severity,
-        hum_severity=hum_severity,
-        overall_severity=overall_severity,
-        detected_hum=detected_hum,
-    )
-
-    # --------------------------------------------------------
-    # DISPLAY DECISION
-    # --------------------------------------------------------
-
-    util.log(f"Noise severity   :  {noise_severity:.3f}", indent=const.INDENT_FILE)
-    util.log(f"Hum severity     :  {hum_severity:.3f}", indent=const.INDENT_FILE)
-    util.log(f"Overall severity :  {overall_severity:.3f}\n", indent=const.INDENT_FILE)
     util.log(f"Processing level :  {processing_level}\n", indent=const.INDENT_FILE)
-
+    util.log(f"Noise reduction  :  {noise_reduction:.2f} dB", indent=const.INDENT_FILE)
+    util.log(f"Hum reduction    :  {hum_reduction:.2f} dB", indent=const.INDENT_FILE)
+    util.log(f"Loudness gain    :  {gain_db:+.2f} dB", indent=const.INDENT_FILE)
+    if highpass is not None:
+        util.log(f"High-pass        :  {highpass} Hz\n", indent=const.INDENT_FILE)
+    else:
+        util.log("High-pass        :  none\n", indent=const.INDENT_FILE)
 
     util.print_filter_chain(filter_chain)
 
-    # --------------------------------------------------------
-    # NO PROCESSING REQUIRED
-    # --------------------------------------------------------
-
     if not filter_chain:
         util.log_ok("No cleaning required.", indent=const.INDENT_FILE_LOG)
-
         output_file = output_dir / input_file.name
 
         try:
             shutil.copy2(input_file, output_file)
-
         except Exception as error:
             print()
-            util.log_error(f"Could not copy audio file -> {error}", indent=const.INDENT_FILE_LOG)
-
+            util.log_error(
+                f"Could not copy audio file -> {error}",
+                indent=const.INDENT_FILE_LOG,
+            )
             return False
 
         util.log_ok("Audio copied as it is.", indent=const.INDENT_FILE_LOG)
-
         return True
 
-    # --------------------------------------------------------
-    # PROCESS AUDIO
-    # --------------------------------------------------------
+    output_file = output_dir / f"{input_file.stem}.wav"
 
-    else:
+    command = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        str(input_file),
+        "-map",
+        "0:a",
+        "-af",
+        filter_chain,
+        "-c:a",
+        "pcm_s16le",
+        str(output_file),
+    ]
 
-        command = [
-            "ffmpeg",
-            "-hide_banner",
-            "-loglevel",
-            "error",
-            "-y",
-            "-i",
-            str(input_file),
-            "-map",
-            "0:a",
-            "-af",
-            filter_chain,
-            "-c:a",
-            "pcm_s16le",
-            str(output_file),
-        ]
-
-    # --------------------------------------------------------
-    # RUN FFMPEG
-    # --------------------------------------------------------
-
-    stderr_log = os.path.join(input_file.parent, const.LOGS_CLEANING, f"{input_file.name}.stderr")
-    
-
-    result, diagnostic_log = util.run_ffmpeg(
-        command,
-        stderr_log,
+    stderr_log = os.path.join(
+        input_file.parent,
+        const.LOGS_CLEANING,
+        f"{input_file.name}.stderr",
     )
+
+    result, diagnostic_log = util.run_ffmpeg(command, stderr_log)
 
     if result.returncode != 0:
         print()
-        util.log_error("FFmpeg audio cleaning failed.", indent=const.INDENT_FILE_LOG)
+        util.log_error(
+            "FFmpeg audio cleaning failed.",
+            indent=const.INDENT_FILE_LOG,
+        )
         if diagnostic_log is not None:
             util.log(f" See {diagnostic_log}", indent=const.INDENT_FILE_LOG)
-
         return False
 
     if not output_file.exists():
         print()
-        util.log_error(" FFmpeg audio cleaning completed without producing the output file.", indent=const.INDENT_FILE_LOG)
+        util.log_error(
+            "FFmpeg audio cleaning completed without producing the output file.",
+            indent=const.INDENT_FILE_LOG,
+        )
         if diagnostic_log is not None:
             util.log(f" See {diagnostic_log}", indent=const.INDENT_FILE_LOG)
-
         return False
 
     if diagnostic_log is not None:
         util.log_warning(
             f"FFmpeg reported decoding issues while cleaning {input_file.name}. "
             f"See {diagnostic_log}.\n",
-            indent=const.INDENT_FILE_LOG
+            indent=const.INDENT_FILE_LOG,
         )
 
-    util.log_ok(f"Cleaned → {output_file.name}",indent=const.INDENT_FILE_LOG)
-
+    util.log_ok(
+        f"Cleaned → {output_file.name}",
+        indent=const.INDENT_FILE_LOG,
+    )
     return True
 
 
 # ============================================================
-# PROCESS ONE AUDIO FILE
+# STAGE 2 — AUDIOBOOK-WIDE LOUDNESS
 # ============================================================
 
-def process_audio_file(audio_file):
+
+# Conservative audiobook playback target.  This is intentionally a
+# fixed library target rather than a per-book average so that different
+# audiobooks in the library have a consistent listening level.
+AUDIOBOOK_TARGET_LUFS = -23.0
+
+# Prevent an unusually quiet recording from receiving an excessive gain
+# boost, even when its measured true peak would technically allow it.
+MAX_LOUDNESS_BOOST_DB = 8.0
+
+# Leave 1 dB of true-peak headroom after loudness gain.
+TRUE_PEAK_LIMIT_DB = -1.0
+
+
+def calculate_loudness_gain(source_lufs, source_true_peak_db):
+    """Calculate the final per-file loudness gain.
+
+    The audiobook uses one fixed target loudness.  Positive gain is
+    constrained by both a maximum boost and the measured source true peak.
+    Negative gain is unrestricted by those positive-gain limits.
     """
-    Run the complete audiobook audio-cleaning pipeline
-    for a single audio file.
 
-    Stage 1 → Stage 2 → Stage 3
+    if source_lufs is None:
+        return 0.0, None
 
-    A failure in one audio file does not stop the
-    audiobook processing operation.
+    desired_gain = AUDIOBOOK_TARGET_LUFS - source_lufs
+
+    if desired_gain <= 0:
+        return round(desired_gain, 2), None
+
+    limits = [(MAX_LOUDNESS_BOOST_DB, "maximum_boost")]
+
+    if source_true_peak_db is not None:
+        true_peak_headroom = TRUE_PEAK_LIMIT_DB - source_true_peak_db
+        limits.append((true_peak_headroom, "true_peak_limit"))
+
+    positive_limit, reason = min(limits, key=lambda item: item[0])
+
+    final_gain = min(desired_gain, positive_limit)
+
+    if final_gain < 0:
+        final_gain = 0.0
+
+    return round(final_gain, 2), (reason if final_gain < desired_gain else None)
+
+
+# ============================================================
+# STAGE 2 — BUILD ONE FILE'S PROCESSING PLAN
+# ============================================================
+
+
+def build_processing_plan(analysis):
+    """
+    Build the Stage 2 processing plan for one analyzed file.
+
+    This function makes decisions but does not process audio.
     """
 
-    audio_file = Path(audio_file)
+    decision = determine_processing_level(analysis)
 
-    # --------------------------------------------------------
-    # ERROR LOG PATH
-    # --------------------------------------------------------
+    processing_level = decision["processing_level"]
+    noise_severity = decision["noise_severity"]
+    hum_severity = decision["hum_severity"]
+    overall_severity = decision["overall_severity"]
 
-    error_log = (
-        audio_file.parent
-        / const.LOGS_ANALYSIS
-        / f"{audio_file.name}.error"
+    noise_reduction = calculate_noise_reduction(
+        noise_severity,
+        processing_level,
     )
 
-    try:
+    hum_reduction = calculate_hum_reduction(
+        hum_severity,
+        processing_level,
+    )
 
-        # ----------------------------------------------------
-        # STAGE 1 — ANALYZE AUDIO
-        # ----------------------------------------------------
+    highpass = calculate_highpass(
+        overall_severity,
+        processing_level,
+    )
 
-        analysis = analyze_audio(str(audio_file))
+    detected_hum = analysis["hum"].get("detected_hum")
+    if detected_hum is not None:
+        detected_hum = int(detected_hum)
 
-        # ----------------------------------------------------
-        # STAGE 2 — DETERMINE PROCESSING LEVEL
-        # ----------------------------------------------------
+    source_loudness = analysis.get("loudness") or {}
+    source_lufs = source_loudness.get("integrated_loudness")
+    source_true_peak_db = source_loudness.get("true_peak")
 
-        processing_decision = determine_processing_level(analysis)
+    # The target is audiobook-wide, so every valid file receives its
+    # gain decision against the same Stage 2 target.
+    gain_db, gain_limit_reason = calculate_loudness_gain(
+        source_lufs,
+        source_true_peak_db,
+    )
 
-        # ----------------------------------------------------
-        # STAGE 3 — CLEAN AUDIO
-        # ----------------------------------------------------
+    return {
+        "file": analysis["file"],
+        "cleaning": {
+            "level": processing_level,
+            "noise_reduction_db": noise_reduction,
+            "hum_reduction_db": hum_reduction,
+            "hum_frequency_hz": detected_hum,
+            "highpass_hz": highpass,
+        },
+        "diagnostics": {
+            "overall_severity": overall_severity,
+            "noise_severity": noise_severity,
+            "hum_severity": hum_severity,
+        },
+        "loudness": {
+            "source_lufs": source_lufs,
+            "source_true_peak_db": source_true_peak_db,
+            "source_loudness_range": source_loudness.get("loudness_range"),
+            "gain_db": gain_db,
+            "gain_limited_by": gain_limit_reason,
+        },
+    }
 
-        success = clean_audio(
-            str(audio_file),
-            processing_decision,
-            analysis,
-        )
-
-        return success
-
-    except Exception as error:
-
-        error_message = (
-            f"Audio processing failed for: {audio_file.name}\n"
-            f"Error: {type(error).__name__}: {error}"
-        )
-
-        # Terminal
-        print()
-        util.log_error(
-            f"processing {audio_file.name}: {error}",
-            indent=const.INDENT_FILE_LOG,
-        )
-
-        const.ERR_FILE_REJECTED = True
-
-        # Persistent error log
-        util.log_file_error(
-            error_message,
-            error_log,
-        )
-
-        return False
 
 # ============================================================
-# PROCESS AUDIOBOOK DIRECTORY
+# METADATA HELPERS
+# ============================================================
+
+
+# def _metadata_path(book_path, filename):
+#     return Path(book_path) / filename
+
+
+def _write_json(path, data):
+    """Write JSON metadata atomically enough for stage-level persistence."""
+
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    temporary = path.with_suffix(path.suffix + ".tmp")
+
+    with temporary.open("w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=4, ensure_ascii=False)
+        handle.write("\n")
+
+    temporary.replace(path)
+
+
+def _load_json(path):
+    path = Path(path)
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+# ============================================================
+# STAGE 1 — ANALYZE ALL AUDIO
+# ============================================================
+
+
+def stage1_analyze(book_path, audio_files):
+    """
+    Stage 1 — Analyze every source audio file and persist one
+    audiobook-level metadata JSON document.
+    """
+
+    book_path = Path(book_path)
+    metadata_path = Path(const.METADATA_PATH, "stage1_metadata.json")
+
+    util.title_card("Stage 1 : Analyze", type="stage", char="-")
+
+    files = []
+    failed = 0
+
+    for index, audio_file in enumerate(audio_files, start=1):
+        print()
+        util.log(f"[cyan1]\n[{index}/{len(audio_files)}][/cyan1]")
+
+        audio_file = Path(audio_file)
+        error_log = audio_file.parent / const.LOGS_ANALYSIS / f"{audio_file.name}.error"
+
+        try:
+            files.append(analyze_audio(audio_file))
+        except Exception as error:
+            failed += 1
+            const.ERR_FILE_REJECTED = True
+            util.log_error(
+                f" processing {audio_file.name}: {error}",
+                indent=const.INDENT_FILE_LOG,
+            )
+            util.log_file_error(
+                f"Audio analysis failed for: {audio_file.name}\n"
+                f"Error: {type(error).__name__}: {error}",
+                error_log,
+            )
+
+    if failed:
+        util.log_warning("Some files failed analysis. See the error logs for details.")
+
+    metadata = {
+        "files": files,
+    }
+
+    _write_json(metadata_path, metadata)
+
+    util.batch_summary(total=len(audio_files), successful=len(files), failed=failed)
+
+    util.log_ok(
+        f"Stage 1 metadata written → {metadata_path.name}",
+    )
+    util.log_ok("Stage 1 complete")
+
+    return metadata
+
+
+# ============================================================
+# STAGE 2 — BUILD ALL PROCESSING PLANS
+# ============================================================
+
+
+def stage2_process(book_path, stage1_metadata):
+    """
+    Stage 2 — Interpret the complete Stage 1 dataset and persist one
+    audiobook-level processing metadata JSON document.
+
+    Stage 2 also makes the audiobook-wide loudness decision.
+    Every valid file is planned against one fixed target LUFS and a
+    true-peak ceiling.
+    """
+
+    book_path = Path(book_path)
+    metadata_path = Path(os.path.join(const.METADATA_PATH, "stage2_metadata.json"))
+
+    util.title_card("Stage 2 : Processing", type="stage", char="-")
+
+    plans = []
+    total = len(stage1_metadata["files"])
+    failed = 0
+
+    for index, analysis in enumerate(stage1_metadata["files"], start=1):
+        print()
+        util.log(f"[cyan1]\n[{index}/{total}][/cyan1]")
+        util.log(f"{analysis['file']}\n", indent=const.INDENT_FILE)
+
+        try:
+            plan = build_processing_plan(analysis)
+            plans.append(plan)
+
+            util.log(
+                f"Noise severity   :  {plan['diagnostics']['noise_severity']:.3f}",
+                indent=const.INDENT_FILE,
+            )
+            util.log(
+                f"Hum severity     :  {plan['diagnostics']['hum_severity']:.3f}",
+                indent=const.INDENT_FILE,
+            )
+            util.log(
+                f"Overall severity :  {plan['diagnostics']['overall_severity']:.3f}",
+                indent=const.INDENT_FILE,
+            )
+            util.log(
+                f"Processing level :  {plan['cleaning']['level']}",
+                indent=const.INDENT_FILE,
+            )
+            util.log(
+                f"Source loudness  :  {plan['loudness']['source_lufs']} LUFS",
+                indent=const.INDENT_FILE,
+            )
+            util.log(
+                f"Loudness gain    :  {plan['loudness']['gain_db']:+.2f} dB\n",
+                indent=const.INDENT_FILE,
+            )
+
+        except Exception as error:
+            failed += 1
+            const.ERR_FILE_REJECTED = True
+            util.log_error(
+                f" processing {analysis['file']}: {error}",
+                indent=const.INDENT_FILE_LOG,
+            )
+
+    metadata = {
+        "loudness": {
+            "target_lufs": AUDIOBOOK_TARGET_LUFS,
+            "true_peak_limit_db": TRUE_PEAK_LIMIT_DB,
+            "max_boost_db": MAX_LOUDNESS_BOOST_DB,
+        },
+        "files": plans,
+    }
+
+    _write_json(metadata_path, metadata)
+
+    util.batch_summary(total=total, successful=len(plans), failed=failed)
+
+    util.log_ok(
+        f"Stage 2 metadata written → {metadata_path.name}",
+    )
+    util.log_ok("Stage 2 complete")
+
+    return metadata
+
+
+# ============================================================
+# STAGE 3 — EXECUTE ALL PROCESSING PLANS
+# ============================================================
+
+
+def stage3_clean(book_path, stage2_metadata):
+    """
+    Stage 3 — Execute the persisted processing plans.
+
+    Existing output files are treated as completed work so that Stage 3
+    can resume after an interrupted run.
+    """
+
+    book_path = Path(book_path)
+    audio_by_name = {
+        Path(audio_file).name: Path(audio_file) for audio_file in const.AUDIO_FILES
+    }
+
+    print()
+    util.title_card("Stage 3 : Cleaning", type="stage", char="-")
+
+    successful = 0
+    failed = 0
+
+    output_dir = book_path / "Standardized_Audiobook"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    const.STANDARDIZED_BOOK_PATH = output_dir
+
+    for index, plan in enumerate(stage2_metadata["files"], start=1):
+        print()
+        util.log(f"[cyan1]\n[{index}/{len(stage2_metadata['files'])}][/cyan1]")
+
+        filename = plan["file"]
+        input_file = audio_by_name.get(filename, book_path / filename)
+
+        if not input_file.exists():
+            failed += 1
+            const.ERR_FILE_REJECTED = True
+            util.log_error(
+                f" source file not found: {filename}",
+                indent=const.INDENT_FILE_LOG,
+            )
+            continue
+
+        cleaning = plan["cleaning"]
+        loudness = plan.get("loudness") or {}
+        gain_db = float(loudness.get("gain_db") or 0.0)
+        needs_processing = (
+            cleaning["noise_reduction_db"] > 0
+            or cleaning["hum_reduction_db"] > 0
+            or cleaning["highpass_hz"] is not None
+            or abs(gain_db) > 0.001
+        )
+
+        if not needs_processing:
+            output_file = output_dir / filename
+        else:
+            output_file = output_dir / f"{Path(filename).stem}.wav"
+
+        if output_file.exists():
+            successful += 1
+            util.log_ok(
+                f"Already complete → {output_file.name}",
+                indent=const.INDENT_FILE_LOG,
+            )
+            continue
+
+        try:
+            success = clean_audio(input_file, plan)
+            if success:
+                successful += 1
+            else:
+                failed += 1
+        except Exception as error:
+            failed += 1
+            const.ERR_FILE_REJECTED = True
+            util.log_error(
+                f" processing {filename}: {error}",
+                indent=const.INDENT_FILE_LOG,
+            )
+
+    util.batch_summary(
+        total=len(stage2_metadata["files"]), successful=successful, failed=failed
+    )
+
+    util.log_ok("Stage 3 complete")
+
+    return failed == 0
+
+
+# ============================================================
+# AUDIOBOOK PIPELINE
 # ============================================================
 
 
 def audiobook_cleaning(book_path):
     """
-    Process all supported audio files in an audiobook directory.
+    Run the audiobook through the true batch Stage 1 → Stage 2 → Stage 3
+    architecture.
 
-    Each file independently goes through:
-
-        Stage 1 → Stage 2 → Stage 3
+    Stage 1 analyzes every file first and writes stage1_metadata.json.
+    Stage 2 reads that complete dataset, creates all processing plans, and
+    writes stage2_metadata.json.
+    Stage 3 executes those persisted plans and can resume from existing
+    output files.
     """
 
     book_path = Path(book_path)
@@ -1267,54 +1594,46 @@ def audiobook_cleaning(book_path):
     if not book_path.is_dir():
         raise NotADirectoryError(book_path)
 
+    audio_files = [Path(file) for file in const.AUDIO_FILES]
+
+    if not audio_files:
+        raise ValueError("No audio files were provided for audiobook processing.")
+
+    util.title_card("PHASE 1 : AUDIO CLEANING", type="phase", char="=")
+
+    stage1_path = Path(os.path.join(const.METADATA_PATH, "stage1_metadata.json"))
+    stage2_path = Path(os.path.join(const.METADATA_PATH, "stage2_metadata.json"))
+
     # --------------------------------------------------------
-    # FIND AUDIO FILES
+    # STAGE 1
     # --------------------------------------------------------
 
-    audio_files = const.AUDIO_FILES
+    if stage1_path.exists():
+        util.log_ok(
+            f"Stage 1 metadata found → {stage1_path.name}. Skipping Stage 1.",
+            indent=const.INDENT_FILE_LOG,
+        )
+        stage1_metadata = _load_json(stage1_path)
+    else:
+        stage1_metadata = stage1_analyze(book_path, audio_files)
 
+    # --------------------------------------------------------
+    # STAGE 2
+    # --------------------------------------------------------
+
+    if stage2_path.exists():
+        util.log_ok(
+            f"Stage 2 metadata found → {stage2_path.name}. Skipping Stage 2.",
+            indent=const.INDENT_FILE_LOG,
+        )
+        stage2_metadata = _load_json(stage2_path)
+    else:
+        stage2_metadata = stage2_process(book_path, stage1_metadata)
+
+    # --------------------------------------------------------
+    # STAGE 3
+    # --------------------------------------------------------
+
+    stage3_clean(book_path, stage2_metadata)
     print()
-    util.rich_divider(char="=")
-    util.log("[bold][dark_turquoise]PHASE 1 : AUDIO CLEANING[/dark_turquoise][/bold]", indent=const.INDENT_PHASE)
-    util.rich_divider(char="=")
-
-    # --------------------------------------------------------
-    # PROCESS EACH FILE
-    # --------------------------------------------------------
-
-    successful = 0
-    failed = 0
-
-    for index, audio_file in enumerate(audio_files, start=1):
-
-        print()
-        util.log(f"[cyan1]\n[{index}/{len(audio_files)}][/cyan1]")
-
-        try:
-
-            success = process_audio_file(audio_file)
-
-            if success:
-                successful += 1
-            else:
-                failed += 1
-
-        except Exception as error:
-
-            failed += 1
-
-            print()
-            util.log_error(f" processing  {audio_file.name}: {error}", indent=const.INDENT_FILE_LOG)
-
-    # --------------------------------------------------------
-    # SUMMARY
-    # --------------------------------------------------------
-
-    print()
-    util.rich_divider(char="=")
-
-    util.log(f" Total      : [bold][white]{len(audio_files)}[/bold][/white]")
-    util.log(f" Successful : [bold][green4]{successful}[/bold][/green4]")
-    util.log(f" Failed     : [bold][red3]{failed}[/bold][/red3]")
-
-    util.rich_divider(char="=")
+    util.log_ok("Phase 1 complete")

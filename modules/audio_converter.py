@@ -8,7 +8,7 @@ sys.path.insert(0, str(ROOT))
 
 from utils import constants as const
 from utils import utility as util
-from preprocessing import in_order_ill_named as rename
+from preprocessing import in_order_rename as rename
 
 
 def normalize_audio_file(input_extension: str, book_path: str):
@@ -54,7 +54,9 @@ def normalize_audio_file(input_extension: str, book_path: str):
         dst = book_dir / f"{src.stem}{OUTPUT_EXTENSION}"
 
         if dst.exists():
-            util.log_info(f" {dst.name} already exists. " f"Removing source {src.name}.")
+            util.log_info(
+                f" {dst.name} already exists. " f"Removing source {src.name}."
+            )
             src.unlink()
             continue
 
@@ -76,7 +78,9 @@ def normalize_audio_file(input_extension: str, book_path: str):
             str(tmp),
         ]
 
-        stderr_log = os.path.join(Path(book_dir).parent, const.LOGS_CONVERSION, f"{src.name}.stderr")
+        stderr_log = os.path.join(
+            Path(book_dir).parent, const.LOGS_CONVERSION, f"{src.name}.stderr"
+        )
 
         try:
             result, diagnostic_log = util.run_ffmpeg(
@@ -115,16 +119,14 @@ def normalize_audio_file(input_extension: str, book_path: str):
             util.log_error(f" {src.name}: {e}")
 
     print()
-    util.log_ok(f" Audio conversion complete.")
+    util.log_ok(f" Audio conversion complete\n")
 
 
 def normalize_audiobook(book_dir: str):
 
     # ---------- Convert supported audio formats to the standard format (.mp3) ----------
-    print()
-    util.rich_divider(char="=")
-    util.log("[bold][dark_turquoise]PHASE 2 : AUDIO CONVERSION[/bold][/dark_turquoise]",indent=const.INDENT_PHASE)
-    util.rich_divider(char="=")
+
+    util.title_card("PHASE 2 : AUDIO CONVERSION", type="phase", char="=")
 
     for extension in const.SUPPORTED_AUDIO_EXTENSIONS:
 
@@ -136,4 +138,7 @@ def normalize_audiobook(book_dir: str):
 
     if const.ERR_FILE_REJECTED:
 
+        util.log_info("Audio files renaming required")
+        print()
+        util.log_ok("Initiated renaming sequence\n")
         rename.rename_audiobook()
