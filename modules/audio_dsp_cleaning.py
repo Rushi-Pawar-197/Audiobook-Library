@@ -110,9 +110,7 @@ def load_audio_for_analysis(file_path, sample_rate=16000):
         "-",
     ]
 
-    stderr_log = os.path.join(
-        file_path.parent, const.LOGS_ANALYSIS, f"{file_path.name}.stderr"
-    )
+    stderr_log = os.path.join(const.LOGS_ANALYSIS / f"{file_path.name}.stderr")
 
     result, diagnostic_log = util.run_ffmpeg(
         command,
@@ -1140,11 +1138,7 @@ def clean_audio(
         str(output_file),
     ]
 
-    stderr_log = os.path.join(
-        input_file.parent,
-        const.LOGS_CLEANING,
-        f"{input_file.name}.stderr",
-    )
+    stderr_log = const.LOGS_CLEANING / f"{input_file.name}.stderr"
 
     result, diagnostic_log = util.run_ffmpeg(command, stderr_log)
 
@@ -1359,7 +1353,7 @@ def stage1_analyze(book_path, audio_files):
         util.log(f"[cyan1]\n[{index}/{len(audio_files)}][/cyan1]")
 
         audio_file = Path(audio_file)
-        error_log = audio_file.parent / const.LOGS_ANALYSIS / f"{audio_file.name}.error"
+        error_log = const.LOGS_ANALYSIS / f"{audio_file.name}.error"
 
         try:
             files.append(analyze_audio(audio_file))

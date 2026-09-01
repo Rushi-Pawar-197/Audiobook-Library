@@ -78,9 +78,7 @@ def normalize_audio_file(input_extension: str, book_path: str):
             str(tmp),
         ]
 
-        stderr_log = os.path.join(
-            Path(book_dir).parent, const.LOGS_CONVERSION, f"{src.name}.stderr"
-        )
+        stderr_log = os.path.join(const.LOGS_CONVERSION / f"{src.name}.stderr")
 
         try:
             result, diagnostic_log = util.run_ffmpeg(
@@ -141,4 +139,4 @@ def normalize_audiobook(book_dir: str):
         util.log_info("Audio files renaming required")
         print()
         util.log_ok("Initiated renaming sequence\n")
-        rename.rename_audiobook()
+        rename.rename_audiobook(const.STANDARDIZED_BOOK_PATH)

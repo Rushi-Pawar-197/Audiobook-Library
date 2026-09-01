@@ -20,7 +20,7 @@ def preprocessing_pipeline(book_dir: Path):
         PP_type = input(
             "\nSelect preprocessing type : \n\n1. Disk subfolder structure\n2. In-order renaming\n3. Cancel\n\nEnter choice (1/2/3) : "
         )
-
+        print()
         if PP_type == "1":
             disk.organize_audiobook(book_dir)
         elif PP_type == "2":

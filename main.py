@@ -5,6 +5,7 @@ import os
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+import config as cfg
 from utils import constants as const
 from utils import utility as util
 from modules import audio_dsp_cleaning as dsp
@@ -18,10 +19,12 @@ start_T = time.time()
 
 # ========= CONFIG =========
 
-book_dir = Path(const.BOOK_DIR)
-album = const.ALBUM
-artist = const.ARTIST
-cover_path = Path(const.COVER_PATH)
+config_parameters = [cfg.BOOK_DIR, cfg.COVER_PATH, cfg.ARTIST, cfg.ALBUM]
+
+book_dir = Path(cfg.BOOK_DIR)
+album = cfg.ALBUM
+artist = cfg.ARTIST
+cover_path = Path(cfg.COVER_PATH)
 
 # ==========================
 
@@ -29,7 +32,7 @@ util.start_msg()
 
 prep.preprocessing_pipeline(book_dir)
 
-util.print_parameters(book_dir)
+util.config_parameters(config_parameters)
 
 dsp.audiobook_cleaning(book_dir)
 
@@ -39,9 +42,10 @@ converter.normalize_audiobook(new_BOOK_DIR)
 
 meta.update_metadata(new_BOOK_DIR, cover_path, artist, album)
 
-final_cleanup_executed = util.cleanup(const.BOOK_DIR)
+final_cleanup_executed = util.cleanup(cfg.BOOK_DIR)
 
-util.log_ok(" Program execution successful.")
+print()
+util.log_ok("Program execution successful.")
 
 
 end_T = time.time()

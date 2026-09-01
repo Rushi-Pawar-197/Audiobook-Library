@@ -1,16 +1,14 @@
-# constants for Ausiobook formatting module
+from pathlib import Path
+import sys
 
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
-BOOK_DIR = "/home/rushikesh/Audiobooks/Unprocessed/time test/test_book/"
+import config as cfg
 
-COVER_PATH = "/home/rushikesh/Audiobooks/covers/Foundation/F7.png"
-
-ARTIST = "Isaac Asimov"
-
-ALBUM = "Foundation And Earth"
-
-
+# ============================================================
 # Logging constants
+# ============================================================
 
 INDENT_FILE = 6
 INDENT_FILE_LOG = INDENT_FILE - 1
@@ -19,19 +17,32 @@ LINE_WIDTH = 90
 
 METADATA_PATH = "metadata/"
 
-# Logging DIR constants
-LOGS_DIR = "logs/"
-LOGS_ANALYSIS = "logs/phase1_analysis/"
-LOGS_CLEANING = "logs/phase1_cleaning/"
-LOGS_CONVERSION = "logs/conversion/"
+# ============================================================
+# PROJECT LOGGING DIRECTORIES
+# ============================================================
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
+LOGS_DIR = PROJECT_ROOT / "logs"
+ERR_LOGS_DIR = LOGS_DIR / "err_logs"
+COMPLETE_LOGS_DIR = LOGS_DIR / "complete_logs"
+
+LOGS_ANALYSIS = ERR_LOGS_DIR / "phase1_analysis"
+LOGS_CLEANING = ERR_LOGS_DIR / "phase1_cleaning"
+LOGS_CONVERSION = ERR_LOGS_DIR / "conversion"
+
+COMPLETE_LOGS_DIR = LOGS_DIR / "complete_logs"
+ERR_LOGS_DIR = LOGS_DIR / "err_logs"
+
+# ============================================================
 # other_constants
+# =============================================================
+
 
 AUDIO_FILES = 0
 ERR_FILE_REJECTED = False
 
-STANDARDIZED_BOOK_PATH = BOOK_DIR + "Standardized_Audiobook"
+STANDARDIZED_BOOK_PATH = cfg.BOOK_DIR + "Standardized_Audiobook"
 
 # Audio conversion consts
 

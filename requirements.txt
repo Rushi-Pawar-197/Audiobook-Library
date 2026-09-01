@@ -1,6 +1,4 @@
 mutagen>=1.46.0
 numpy
-ffmpeg
-ffprobe
 rich
 black

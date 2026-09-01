@@ -4,11 +4,64 @@ from rich.highlighter import NullHighlighter
 from pathlib import Path
 import subprocess
 import shutil
+from datetime import datetime
+import re
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from utils import constants as const
+import config as cfg
+
+
+class TeeLogger:
+
+    ANSI_ESCAPE = re.compile(
+        r"""
+        \x1B
+        [@-_]
+        [0-?]*
+        [ -/]*
+        [@-~]
+        """,
+        re.VERBOSE,
+    )
+
+    def __init__(self, terminal, log_file):
+
+        self.terminal = terminal
+        self.log_file = log_file
+
+    def write(self, data):
+
+        # Original output → terminal
+        self.terminal.write(data)
+        self.terminal.flush()
+
+        # ANSI-free output → log file
+        clean_data = self.ANSI_ESCAPE.sub("", data)
+
+        self.log_file.write(clean_data)
+        self.log_file.flush()
+
+    def flush(self):
+
+        self.terminal.flush()
+        self.log_file.flush()
+
+
+const.COMPLETE_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+log_file = open(
+    const.COMPLETE_LOGS_DIR / f"run-{timestamp}.log",
+    "w",
+    encoding="utf-8",
+)
+
+sys.stdout = TeeLogger(sys.__stdout__, log_file)
+sys.stderr = TeeLogger(sys.__stderr__, log_file)
 
 console = Console(
     file=sys.stdout,
@@ -150,7 +203,15 @@ def print_filter_chain(filter_chain):
     print()
 
 
+def setup_logging():
+
+    const.ERR_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+    const.COMPLETE_LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+
 def start_msg():
+
+    setup_logging()
 
     title = "Starting Audiobook Standardization Program ..."
     width = 68
@@ -188,6 +249,7 @@ def get_est_time_str(directory):
     """
 
     total_duration = 0.0
+    no_of_files = sum(1 for file in directory.iterdir() if file.is_file())
 
     for file_path in Path(directory).iterdir():
         if not file_path.is_file():
@@ -213,10 +275,28 @@ def get_est_time_str(directory):
 
         total_duration += float(result.stdout.strip())
 
+    FFPROBE_TIME_PER_FILE = 0.22
+    PREPROCESSING_TIME_PER_FILE = 1
+    PROCESSING_RATE = 9.47
+    CONVERSION_TIME_PER_AUDIO_MINUTE = 4
+    METADATA_TIME_PER_FILE = 3
+
+    ffprobe_time = FFPROBE_TIME_PER_FILE * no_of_files
+
+    preprocessing_time = PREPROCESSING_TIME_PER_FILE * no_of_files
+
+    processing_time = total_duration / PROCESSING_RATE
+
+    conversion_time = total_duration / 60 * CONVERSION_TIME_PER_AUDIO_MINUTE
+
+    metadata_time = METADATA_TIME_PER_FILE * no_of_files
+
     calculated_est_time = (
-        int((52 / 2589) * total_duration)
-        + total_duration / 135
-        + 5 * len(const.AUDIO_FILES)
+        ffprobe_time
+        + preprocessing_time
+        + processing_time
+        + conversion_time
+        + metadata_time
     )
 
     est_time_str = format_time(calculated_est_time)
@@ -224,19 +304,46 @@ def get_est_time_str(directory):
     return est_time_str
 
 
-def print_parameters(book_path: str):
+def config_parameters(config_params: list):
 
-    audio_files = get_num_files(book_path)
+    book_dir = Path(config_params[0])
+    cover_path = Path(config_params[1])
+    artist = config_params[2]
+    album = config_params[3]
+
+    audio_files = get_num_files(book_dir)
     const.AUDIO_FILES = audio_files
-    est_time_str = get_est_time_str(book_path)
+    est_time_str = get_est_time_str(book_dir)
 
     n_audio_files = len(audio_files)
 
-    print()
-    log(f"Directory\t: [grey50]{book_path}[/grey50]")
-    print(f"No. of Files\t: {n_audio_files}")
-    log(f"Estimated time\t: [sea_green1]{est_time_str}[/sea_green1]")
-    print()
+    print("\n")
+    log("[bright_white]Configuration Parameters :[/bright_white]\n")
+
+    log(f"Book Directory\t: [grey50]{book_dir}[/grey50]")
+    log(f"Cover Path\t: [grey50]{cover_path}[/grey50]")
+    log(f"Album\t\t: [grey50]{album}[/grey50]")
+    log(f"Artist\t\t: [grey50]{artist}[/grey50]\n")
+    log(f"No. of Files\t: {n_audio_files}")
+    log(f"Est. Max. time\t: [sea_green1]{est_time_str}[/sea_green1]\n")
+
+    book_dir_valid = book_dir and book_dir.is_dir()
+    cover_path_valid = cover_path and cover_path.is_file()
+
+    if book_dir_valid and cover_path_valid and artist and album:
+        log_ok("Configuration parameters checked")
+
+    else:
+        log_warning("Some configuration parameters missing/invalid\n")
+
+        config_miss_flag = input("Continue ? (y/n) : ")
+        print()
+
+        if config_miss_flag.lower() == "y":
+            log_info("Continuing with missing configuration parameters\n")
+        else:
+            log_info("Program execution aborted\n")
+            sys.exit(0)
 
 
 def title_card(msg: str, type: str, char: str = "="):
@@ -299,7 +406,7 @@ def cleanup(book_path):
     # DIRECTORIES
     # ========================================================
 
-    logs_dir = book_path / "logs"
+    logs_dir = const.ERR_LOGS_DIR
     standardized_dir = Path(const.STANDARDIZED_BOOK_PATH)
 
     # ========================================================
@@ -307,7 +414,7 @@ def cleanup(book_path):
     # ========================================================
 
     if not logs_dir.is_dir():
-        log_info(f"Cleanup aborted: logs directory not found: {logs_dir}")
+        log_info(f"Cleanup skipped: logs directory not found: {logs_dir}")
         return False
 
     # --------------------------------------------------------
@@ -318,6 +425,20 @@ def cleanup(book_path):
     # accidentally placed inside a nested directory prevents
     # destructive cleanup.
     # --------------------------------------------------------
+
+    # ========================================================
+    # REMOVE METADATA DIRECTORY
+    # ========================================================
+
+    try:
+        shutil.rmtree(const.METADATA_PATH)
+
+    except Exception as error:
+        log_warning(f"Cleanup failed while removing metadata directory: {error}")
+
+    # =======================================================
+    # LOG CLEANUP
+    # =======================================================
 
     log_files = []
 
@@ -380,16 +501,8 @@ def cleanup(book_path):
         log_warning(f"Cleanup failed while removing logs directory: {error}")
         cleanup_failed = True
 
-    try:
-        shutil.rmtree(const.METADATA_PATH)
-
-    except Exception as error:
-        log_warning(f"Cleanup failed while removing metadata directory: {error}")
-        cleanup_failed = True
-
     if cleanup_failed:
         return False
-
     # ========================================================
     # MOVE STANDARDIZED AUDIOBOOK CONTENTS
     # ========================================================

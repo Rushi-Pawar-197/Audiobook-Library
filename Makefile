@@ -1,5 +1,4 @@
-.PHONY: setup venv install run clean
-
+.PHONY: setup venv system-deps install run clean
 
 # ============================================================
 # OS DETECTION
@@ -30,6 +29,86 @@ endif
 
 
 # ============================================================
+
+# SYSTEM DEPENDENCIES
+
+# ============================================================
+
+system-deps:
+
+ifeq ($(OS),Windows_NT)
+
+@echo [INFO] Checking system dependencies...
+@where ffmpeg >nul 2>nul && where ffprobe >nul 2>nul || ( \
+	echo [ERROR] FFmpeg and FFprobe were not found. && \
+	echo [INFO] Please install FFmpeg and ensure ffmpeg and ffprobe are available in PATH. && \
+	exit /b 1 \
+)
+@echo [OK] System dependencies available.
+
+
+else ifeq ($(UNAME_S),Darwin)
+
+
+	@if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; then \
+		printf "[OK]  System dependencies available.\n"; \
+	else \
+		printf "[INFO] System dependencies missing. Installing FFmpeg...\n"; \
+		if command -v brew >/dev/null 2>&1; then \
+			brew install ffmpeg || exit 1; \
+		else \
+			printf "[ERROR] Homebrew is required to install FFmpeg automatically.\n"; \
+			printf "[INFO] Please install FFmpeg manually and run make setup again.\n"; \
+			exit 1; \
+		fi; \
+		if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; then \
+			printf "[OK]  System dependencies installed.\n"; \
+		else \
+			printf "[ERROR] FFmpeg installation completed, but ffmpeg or ffprobe is not available in PATH.\n"; \
+			exit 1; \
+		fi; \
+	fi
+
+
+else ifeq ($(UNAME_S),Linux)
+
+
+	@if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; then \
+		printf "[OK]  System dependencies available.\n"; \
+	else \
+		printf "[INFO] System dependencies missing. Installing FFmpeg...\n"; \
+		if command -v apt-get >/dev/null 2>&1; then \
+			sudo apt-get update && sudo apt-get install -y ffmpeg || exit 1; \
+		elif command -v dnf >/dev/null 2>&1; then \
+			sudo dnf install -y ffmpeg || exit 1; \
+		elif command -v pacman >/dev/null 2>&1; then \
+			sudo pacman -Sy --noconfirm ffmpeg || exit 1; \
+		else \
+			printf "[ERROR] Unsupported package manager.\n"; \
+			printf "[INFO] Please install FFmpeg manually and run make setup again.\n"; \
+			exit 1; \
+		fi; \
+		if command -v ffmpeg >/dev/null 2>&1 && command -v ffprobe >/dev/null 2>&1; then \
+			printf "[OK]  System dependencies installed.\n"; \
+		else \
+			printf "[ERROR] FFmpeg installation completed, but ffmpeg or ffprobe is not available in PATH.\n"; \
+			exit 1; \
+		fi; \
+	fi
+
+
+else
+
+
+@printf "[WARNING] Automatic system dependency installation is not supported on this OS.\n"
+@printf "[INFO] Please ensure ffmpeg and ffprobe are installed and available in PATH.\n"
+
+
+endif
+
+
+
+# ============================================================
 # DEFAULT TARGET
 # ============================================================
 
@@ -40,7 +119,7 @@ endif
 # SETUP
 # ============================================================
 
-setup: venv install
+setup: system-deps venv install
 
 	@printf "[INFO] OS: $(DETECTED_OS)\n\n"
 	@printf "✅ Setup Complete\n\n"
