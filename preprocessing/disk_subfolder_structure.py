@@ -134,6 +134,8 @@ def organize_audiobook(book_dir: Path):
             print()
             continue
 
+        print()
+
         for source_file in audio_files:
 
             destination_file = (
@@ -142,7 +144,10 @@ def organize_audiobook(book_dir: Path):
 
             files_to_rename.append((source_file, destination_file))
 
-            util.log_ok(f"  {source_file.name}" f"  ->  {destination_file.name}")
+            util.log(
+                f"[cyan1][{index}/{len(audio_files)}][/cyan1] {source_file.name}"
+                f"  ->  {destination_file.name}"
+            )
 
             part_number += 1
 
@@ -209,10 +214,9 @@ def organize_audiobook(book_dir: Path):
         total_parts = len(files_to_rename)
 
         print()
-        util.log_ok("Preprocessing sequence complete")
+        util.log_ok("Sequence complete")
         util.log_ok(f"Total files   : {total_parts}")
         print()
-        util.rich_divider(char="-")
 
     except Exception:
 

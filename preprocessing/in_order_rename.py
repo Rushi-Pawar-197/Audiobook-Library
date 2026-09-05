@@ -58,6 +58,8 @@ def rename_audiobook(directory: Path, start_index: int = 1):
 
     rename_operations = []
 
+    print()
+
     for index, source_file in enumerate(files, start=start_index):
 
         new_filename = f"part {index}{source_file.suffix.lower()}"
@@ -66,8 +68,10 @@ def rename_audiobook(directory: Path, start_index: int = 1):
 
         rename_operations.append((source_file, destination_file))
 
-        print(f"{source_file.name}" f"  ->  {new_filename}")
-    print()
+        util.log(
+            f"[cyan1][{index}/{len(files)}][/cyan1] {source_file.name}"
+            f"  ->  {new_filename}"
+        )
 
     # --------------------------------------------------------
     # Phase 1:
@@ -112,10 +116,9 @@ def rename_audiobook(directory: Path, start_index: int = 1):
         # ----------------------------------------------------
 
         print()
-        util.log_ok("Preprocessing sequence complete")
+        util.log_ok("Sequence complete")
         util.log_ok(f"Total files   : {len(rename_operations)}")
         print()
-        util.rich_divider(char="-")
 
     except Exception:
 

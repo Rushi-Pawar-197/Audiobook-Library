@@ -35,10 +35,31 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
         m = re.search(r"\d+", title)
         return int(m.group()) if m else default
 
-    util.title_card("PHASE 3 : METADATA", type="phase", char="=")
+    util.stage_title_card("PHASE 3 : METADATA", type="phase", char="=")
 
     book_dir = Path(book_dir)
-    cover_path = Path(cover_path)
+
+    # ---------- cover ----------
+
+    # Treat both None and "None" as "do not update cover"
+    update_cover = cover_path is not None and str(cover_path).lower() != "none"
+
+    cover_bytes = None
+    mime_guess = None
+
+    if update_cover:
+        cover_path = Path(cover_path)
+
+        mime_guess, _ = mimetypes.guess_type(cover_path)
+        mime_guess = mime_guess or "image/jpeg"
+
+        if cover_path.exists():
+            cover_bytes = cover_path.read_bytes()
+        else:
+            util.log_warning(
+                " Cover image not found. Continuing without cover.",
+                indent=const.INDENT_FILE_LOG,
+            )
 
     # ---------- gather MP3 files ----------
 
@@ -49,25 +70,6 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
 
     if not mp3s:
         raise SystemExit("No .mp3 files found.")
-
-    # ---------- cover ----------
-
-    cover_bytes = None
-    mime_guess, _ = mimetypes.guess_type(cover_path)
-    mime_guess = mime_guess or "image/jpeg"
-
-    if cover_path.exists():
-        cover_bytes = cover_path.read_bytes()
-    else:
-        util.log_warning(
-            " Cover image not found. Continuing without cover.",
-            indent=const.INDENT_FILE_LOG,
-        )
-
-    # print(
-    #     f"Found {len(mp3s)} MP3 files. "
-    #     "Writing ONLY: album, artist, title, track, cover (ID3v2.3)."
-    # )
 
     # ---------- main loop ----------
 
@@ -116,7 +118,8 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
                 id3["TALB"] = TALB(encoding=3, text=album)
                 id3["TRCK"] = TRCK(encoding=3, text=str(track_num))
 
-                if cover_bytes:
+                # Only modify cover when a cover was explicitly supplied
+                if cover_bytes is not None:
                     id3.delall("APIC")
                     id3.add(
                         APIC(
@@ -129,6 +132,7 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
                     )
 
                 id3.save(v2_version=3)
+
             except Exception as e:
                 raise RuntimeError(f"ID3 failed: {e}")
 

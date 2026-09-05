@@ -1343,7 +1343,7 @@ def stage1_analyze(book_path, audio_files):
     book_path = Path(book_path)
     metadata_path = Path(const.METADATA_PATH, "stage1_metadata.json")
 
-    util.title_card("Stage 1 : Analyze", type="stage", char="-")
+    util.stage_title_card("Stage 1 : Analyze", type="stage", char="-")
 
     files = []
     failed = 0
@@ -1379,7 +1379,7 @@ def stage1_analyze(book_path, audio_files):
 
     _write_json(metadata_path, metadata)
 
-    util.batch_summary(total=len(audio_files), successful=len(files), failed=failed)
+    util.batch_summary(total=len(audio_files), good=len(files), dirty=failed)
 
     util.log_ok(
         f"Stage 1 metadata written → {metadata_path.name}",
@@ -1407,7 +1407,7 @@ def stage2_process(book_path, stage1_metadata):
     book_path = Path(book_path)
     metadata_path = Path(os.path.join(const.METADATA_PATH, "stage2_metadata.json"))
 
-    util.title_card("Stage 2 : Processing", type="stage", char="-")
+    util.stage_title_card("Stage 2 : Processing", type="stage", char="-")
 
     plans = []
     total = len(stage1_metadata["files"])
@@ -1466,7 +1466,7 @@ def stage2_process(book_path, stage1_metadata):
 
     _write_json(metadata_path, metadata)
 
-    util.batch_summary(total=total, successful=len(plans), failed=failed)
+    util.batch_summary(total=total, good=len(plans), dirty=failed)
 
     util.log_ok(
         f"Stage 2 metadata written → {metadata_path.name}",
@@ -1490,12 +1490,19 @@ def stage3_clean(book_path, stage2_metadata):
     """
 
     book_path = Path(book_path)
+
+    audio_files = [
+        os.path.join(book_path, file)
+        for file in os.listdir(book_path)
+        if file.lower().endswith(tuple(const.SUPPORTED_AUDIO_EXTENSIONS))
+    ]
+
     audio_by_name = {
-        Path(audio_file).name: Path(audio_file) for audio_file in const.AUDIO_FILES
+        Path(audio_file).name: Path(audio_file) for audio_file in audio_files
     }
 
     print()
-    util.title_card("Stage 3 : Cleaning", type="stage", char="-")
+    util.stage_title_card("Stage 3 : Cleaning", type="stage", char="-")
 
     successful = 0
     failed = 0
@@ -1558,7 +1565,7 @@ def stage3_clean(book_path, stage2_metadata):
             )
 
     util.batch_summary(
-        total=len(stage2_metadata["files"]), successful=successful, failed=failed
+        total=len(stage2_metadata["files"]), good=successful, dirty=failed
     )
 
     util.log_ok("Stage 3 complete")
@@ -1587,42 +1594,29 @@ def audiobook_cleaning(book_path):
 
     if not book_path.is_dir():
         raise NotADirectoryError(book_path)
+    audio_files = [
+        os.path.join(book_path, file)
+        for file in os.listdir(book_path)
+        if file.lower().endswith(tuple(const.SUPPORTED_AUDIO_EXTENSIONS))
+    ]
+    audio_file_path = [Path(file) for file in audio_files]
 
-    audio_files = [Path(file) for file in const.AUDIO_FILES]
-
-    if not audio_files:
+    if not audio_file_path:
         raise ValueError("No audio files were provided for audiobook processing.")
 
-    util.title_card("PHASE 1 : AUDIO CLEANING", type="phase", char="=")
-
-    stage1_path = Path(os.path.join(const.METADATA_PATH, "stage1_metadata.json"))
-    stage2_path = Path(os.path.join(const.METADATA_PATH, "stage2_metadata.json"))
+    util.stage_title_card("PHASE 1 : AUDIO CLEANING", type="phase", char="=")
 
     # --------------------------------------------------------
     # STAGE 1
     # --------------------------------------------------------
 
-    if stage1_path.exists():
-        util.log_ok(
-            f"Stage 1 metadata found → {stage1_path.name}. Skipping Stage 1.",
-            indent=const.INDENT_FILE_LOG,
-        )
-        stage1_metadata = _load_json(stage1_path)
-    else:
-        stage1_metadata = stage1_analyze(book_path, audio_files)
+    stage1_metadata = stage1_analyze(book_path, audio_file_path)
 
     # --------------------------------------------------------
     # STAGE 2
     # --------------------------------------------------------
 
-    if stage2_path.exists():
-        util.log_ok(
-            f"Stage 2 metadata found → {stage2_path.name}. Skipping Stage 2.",
-            indent=const.INDENT_FILE_LOG,
-        )
-        stage2_metadata = _load_json(stage2_path)
-    else:
-        stage2_metadata = stage2_process(book_path, stage1_metadata)
+    stage2_metadata = stage2_process(book_path, stage1_metadata)
 
     # --------------------------------------------------------
     # STAGE 3

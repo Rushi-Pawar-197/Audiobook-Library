@@ -4,8 +4,6 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-import config as cfg
-
 # ============================================================
 # Logging constants
 # ============================================================
@@ -18,31 +16,41 @@ LINE_WIDTH = 90
 METADATA_PATH = "metadata/"
 
 # ============================================================
+# BATCH CONSTANTS
+# ============================================================
+
+REQUIRED_FIELDS = {
+    "book_id",
+    "AUTHOR",
+    "BOOK",
+    "PREPROCESS",
+    "PREPROCESS_TYPE",
+}
+
+BATCH_DIR = ""
+
+# ============================================================
 # PROJECT LOGGING DIRECTORIES
 # ============================================================
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 LOGS_DIR = PROJECT_ROOT / "logs"
-ERR_LOGS_DIR = LOGS_DIR / "err_logs"
-COMPLETE_LOGS_DIR = LOGS_DIR / "complete_logs"
+ERR_LOGS_DIR = ""
 
-LOGS_ANALYSIS = ERR_LOGS_DIR / "phase1_analysis"
-LOGS_CLEANING = ERR_LOGS_DIR / "phase1_cleaning"
-LOGS_CONVERSION = ERR_LOGS_DIR / "conversion"
+LOGS_ANALYSIS = ""
+LOGS_CLEANING = ""
+LOGS_CONVERSION = ""
 
 COMPLETE_LOGS_DIR = LOGS_DIR / "complete_logs"
-ERR_LOGS_DIR = LOGS_DIR / "err_logs"
 
 # ============================================================
 # other_constants
 # =============================================================
 
-
-AUDIO_FILES = 0
 ERR_FILE_REJECTED = False
 
-STANDARDIZED_BOOK_PATH = cfg.BOOK_DIR + "Standardized_Audiobook"
+STANDARDIZED_BOOK_PATH = ""
 
 # Audio conversion consts
 
