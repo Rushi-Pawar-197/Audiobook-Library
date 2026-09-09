@@ -25,6 +25,7 @@ REQUIRED_FIELDS = {
     "BOOK",
     "PREPROCESS",
     "PREPROCESS_TYPE",
+    "DSP_PROCESSING",
 }
 
 BATCH_DIR = ""

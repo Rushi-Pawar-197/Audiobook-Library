@@ -116,8 +116,6 @@ def setup_logging(book_dir: Path):
     const.LOGS_CLEANING = const.ERR_LOGS_DIR / "phase1_cleaning"
     const.LOGS_CONVERSION = const.ERR_LOGS_DIR / "conversion"
 
-    const.STANDARDIZED_BOOK_PATH = book_dir / "Standardized_Audiobook"
-
     const.ERR_LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -314,9 +312,11 @@ def config_parameters(book_dir, cover_path, artist, album):
 
     log(f"\nBook Path\t: [grey50]{book_dir}[/grey50]")
     log(f"Cover Path\t: [grey50]{cover_path}[/grey50]")
-    log(f"Book\t\t: [grey50]{album}[/grey50]")
-    log(f"Author\t\t: [grey50]{artist}[/grey50]\n")
-    log(f"No. of Files\t: {n_audio_files}")
+    log(f"Book\t\t: [yellow1]{album}[/yellow1]")
+    log(f"Author\t\t: [spring_green1]{artist}[/spring_green1]")
+    log(f"Files\t\t: {n_audio_files}\n")
+
+    rich_divider(char="-", colour="dark_turquoise")
 
     return True
 
@@ -338,15 +338,15 @@ def stage_title_card(msg: str, type: str, char: str = "="):
 def batch_summary(total: int, good: int, dirty: int):
 
     print()
-    rich_divider(char="=")
+    rich_divider(char="-")
     log(f" Total      : [bold][white]{total}[/bold][/white]")
     log(f" Good       : [bold][bright_green]{good}[/bold][/bright_green]")
     log(f" Dirty      : [bold][dark_orange]{dirty}[/bold][/dark_orange]")
-    rich_divider(char="=")
+    rich_divider(char="-")
     print()
 
 
-def cleanup(book_path):
+def cleanup(book_path, dsp_processing):
     book_path = Path(book_path)
 
     if not book_path.is_dir():
@@ -417,13 +417,14 @@ def cleanup(book_path):
     # REMOVE SOURCE AUDIO
     # ========================================================
 
-    try:
-        for source_file in source_files:
-            source_file.unlink()
+    if dsp_processing == "y":
+        try:
+            for source_file in source_files:
+                source_file.unlink()
 
-    except Exception as error:
-        log_warning(f"Cleanup failed while removing source audio: {error}")
-        return False
+        except Exception as error:
+            log_warning(f"Cleanup failed while removing source audio: {error}")
+            return False
 
     # ========================================================
     # REMOVE LOGS
@@ -446,9 +447,6 @@ def cleanup(book_path):
             destination = book_path / item.name
 
             if destination.exists():
-                log_warning(
-                    f"Cleanup aborted: destination already exists: " f"{destination}"
-                )
                 return False
 
             shutil.move(str(item), str(destination))
@@ -470,7 +468,9 @@ def cleanup(book_path):
 
 def load_batch():
 
+    # Future enhancement: Allow user to input batch directory path
     # batch_dir = Path(input("Enter batch directory path : ").strip()).expanduser()
+
     batch_dir = Path("/home/rushikesh/Audiobooks/Unprocessed/batch/")
 
     if not batch_dir.is_dir():
@@ -479,7 +479,24 @@ def load_batch():
 
     const.BATCH_DIR = batch_dir
 
-    metadata_path = batch_dir / "audiobook_metadata.csv"
+    # --------------------------------------------------------
+    # Validate CSV metadata file
+    # --------------------------------------------------------
+
+    csv_files = list(batch_dir.glob("*.csv"))
+
+    if not csv_files:
+        log_warning(f"No CSV metadata file found in batch directory: {batch_dir}")
+        terminate_program()
+
+    elif len(csv_files) > 1:
+        log_warning(
+            f"Multiple CSV files found in batch directory: "
+            f"{', '.join(file.name for file in csv_files)}"
+        )
+        terminate_program()
+
+    metadata_path = csv_files[0]
 
     if not metadata_path.is_file():
         log_error(f"Batch metadata file not found: {metadata_path}")
@@ -533,7 +550,7 @@ def validate_batch(batch):
         for field in missing_fields:
             log_error(f"Required CSV field missing: {field}")
 
-        log_error("Batch validation failed. Processing aborted.")
+        log_error("Batch validation failed")
         terminate_program()
 
     # -------------------------------------------------------------------------
@@ -570,6 +587,7 @@ def validate_batch(batch):
         book_name = book["BOOK"].strip()
         preprocess = book["PREPROCESS"].strip().lower()
         preprocess_type = book["PREPROCESS_TYPE"].strip()
+        dsp_processing = book["DSP_PROCESSING"].strip().lower()
 
         # -----------------------------------------------------
         # BOOK ID
@@ -623,7 +641,8 @@ def validate_batch(batch):
         if preprocess not in {"y", "n"}:
 
             log_error(
-                f"Invalid PREPROCESS value '{preprocess}' " f"for Book {book_id_int}"
+                f"Invalid DSP_PROCESSING value '{preprocess}' "
+                f"for Book {book_id_int}"
             )
 
             book_valid = False
@@ -640,6 +659,20 @@ def validate_batch(batch):
 
                 book_valid = False
                 batch_valid = False
+
+        # -----------------------------------------------------
+        # DSP_PROCESSING
+        # -----------------------------------------------------
+
+        if dsp_processing not in {"y", "n"}:
+
+            log_error(
+                f"Invalid DSP_PROCESSING value '{dsp_processing}' "
+                f"for Book {book_id_int}"
+            )
+
+            book_valid = False
+            batch_valid = False
 
         # -----------------------------------------------------
         # BOOK DIRECTORY
@@ -728,7 +761,7 @@ def confirm_batch():
 
     confirmation = input("Proceed with batch processing? (y/n) : ").strip().lower()
 
-    print()
+    print("\n\n")
 
     if confirmation == "y":
         log_info("Proceeding with batch processing\n")
@@ -752,11 +785,12 @@ def process_batch(batch):
         book_id = book["book_id"].strip()
         book_name = book["BOOK"].strip()
 
-        rich_divider(char="=")
+        print()
+        rich_divider(char="━")
         log(
-            f"\n[cyan1][{book_id}/{len(batch['books'])}][/cyan1] [bright_white]Processing Book [bold]{book_id}[/bold][bright_white] : [bold]{book_name}[/bold]\n"
+            f"\n[cyan1][{book_id}/{len(batch['books'])}][/cyan1] [bright_white][bold]{book_name}[/bold][/bright_white]\n"
         )
-        rich_divider(char="=")
+        rich_divider(char="━")
 
         result = process_single_book(book)
         per_book_results.append(result)
@@ -787,6 +821,7 @@ def process_single_book(book):
 
     preprocess = book["PREPROCESS"].strip().lower()
     preprocess_type = book["PREPROCESS_TYPE"].strip()
+    dsp_processing = book["DSP_PROCESSING"].strip().lower()
 
     batch_dir = Path(const.BATCH_DIR)
 
@@ -797,17 +832,19 @@ def process_single_book(book):
     if not valid_audio_files:
         return [book_name, False]
 
-    prep.preprocessing_pipeline(book_dir, preprocess, preprocess_type)
+    prep.preprocessing_pipeline(
+        book_dir, preprocess, preprocess_type, operation_kind="Pre-processing"
+    )
 
-    dsp.audiobook_cleaning(book_dir)
+    dsp.audio_cleaning(book_dir, dsp_processing)
 
-    new_BOOK_DIR = os.path.join(book_dir, "Standardized_Audiobook")
+    new_BOOK_DIR = Path(const.STANDARDIZED_BOOK_PATH)
 
     converter.normalize_audiobook(new_BOOK_DIR)
 
     meta.update_metadata(new_BOOK_DIR, cover_path, author, book_name)
 
-    cleanup(book_dir)
+    cleanup(book_dir, dsp_processing)
 
     success = not (book_dir / "logs" / "err_logs").exists()
 

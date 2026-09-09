@@ -10,19 +10,25 @@ from preprocessing import disk_subfolder_structure as disk
 from preprocessing import in_order_rename as order
 
 
-def preprocessing_pipeline(book_dir: Path, preprocess: str, preprocess_type: str):
+def preprocessing_pipeline(
+    book_dir: Path,
+    preprocess: str,
+    preprocess_type_num: str,
+    operation_kind: str = "Pre-processing",
+) -> None:
 
     if preprocess == "y":
         print()
-        util.log_info("Started preprocessing sequence")
+        util.log_info(f"Started {operation_kind} sequence")
 
-        if preprocess_type == "1":
+        if preprocess_type_num == "1":
             disk.organize_audiobook(book_dir)
 
-        elif preprocess_type == "2":
-            order.rename_audiobook(book_dir)
+        elif preprocess_type_num == "2":
+            order.rename_audiobook(book_dir, operation_kind)
 
     else:
-        util.log_info("Preprocessing sequence skipped")
+        print()
+        util.log_info(f"Skipped {operation_kind} sequence")
 
     return

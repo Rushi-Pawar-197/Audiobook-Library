@@ -143,8 +143,8 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
 
             util.log(f"[cyan1][{idx}/{len(mp3s)}][/cyan1]\n")
             util.log(f"{src.name}\n", indent=const.INDENT_FILE)
-            util.log(f"title:\t'{title}'", indent=const.INDENT_FILE)
-            util.log(f"track:\t{track_num}\n", indent=const.INDENT_FILE)
+            util.log(f"Title:\t'{title}'", indent=const.INDENT_FILE)
+            util.log(f"Track:\t{track_num}\n", indent=const.INDENT_FILE)
 
         except Exception as e:
             if tmp.exists():

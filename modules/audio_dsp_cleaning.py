@@ -724,7 +724,7 @@ def analyze_audio(file_path):
         f"Duration\t\t:  {util.format_time(info['duration'])}", indent=const.INDENT_FILE
     )
     util.log(f"Sample rate\t:  {info['sample_rate']} Hz", indent=const.INDENT_FILE)
-    util.log(f"Channels\t\t:  {info['channel_layout']}\n", indent=const.INDENT_FILE)
+    util.log(f"Channels\t\t:  {info['channel_layout']}", indent=const.INDENT_FILE)
 
     # --------------------------------------------------------
     # LOAD AUDIO
@@ -1058,8 +1058,6 @@ def clean_audio(
 
     input_file = Path(input_file)
 
-    const.STANDARDIZED_BOOK_PATH = input_file.parent / "Standardized_Audiobook"
-
     output_dir = Path(const.STANDARDIZED_BOOK_PATH)
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1168,6 +1166,11 @@ def clean_audio(
             f"See {diagnostic_log}.\n",
             indent=const.INDENT_FILE_LOG,
         )
+        util.log_ok(
+            f"Cleaned → {output_file.name}",
+            indent=const.INDENT_FILE_LOG,
+        )
+        return False
 
     util.log_ok(
         f"Cleaned → {output_file.name}",
@@ -1578,7 +1581,7 @@ def stage3_clean(book_path, stage2_metadata):
 # ============================================================
 
 
-def audiobook_cleaning(book_path):
+def audio_cleaning(book_path, dsp_processing):
     """
     Run the audiobook through the true batch Stage 1 → Stage 2 → Stage 3
     architecture.
@@ -1589,6 +1592,15 @@ def audiobook_cleaning(book_path):
     Stage 3 executes those persisted plans and can resume from existing
     output files.
     """
+
+    if dsp_processing == "n":
+        print()
+        util.log_info("Audio Cleaning sequence skipped")
+        const.STANDARDIZED_BOOK_PATH = book_path
+        return
+
+    else:
+        const.STANDARDIZED_BOOK_PATH = Path(book_path) / "Standardized_Audiobook"
 
     book_path = Path(book_path)
 

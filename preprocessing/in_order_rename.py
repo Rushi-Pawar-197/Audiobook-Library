@@ -40,7 +40,7 @@ def get_audio_files(directory):
 # ============================================================
 
 
-def rename_audiobook(directory: Path, start_index: int = 1):
+def rename_audiobook(directory: Path, type: str, start_index: int = 1) -> None:
 
     DIRECTORY = directory
 
@@ -116,7 +116,7 @@ def rename_audiobook(directory: Path, start_index: int = 1):
         # ----------------------------------------------------
 
         print()
-        util.log_ok("Sequence complete")
+        util.log_ok(f"{type} sequence complete")
         util.log_ok(f"Total files   : {len(rename_operations)}")
         print()
 

@@ -125,6 +125,8 @@ def normalize_audiobook(book_dir: str):
     # ---------- Convert supported audio formats to the standard format (.mp3) ----------
 
     util.stage_title_card("PHASE 2 : AUDIO CONVERSION", type="phase", char="=")
+    print()
+    util.log_info(f"Performing audio normalization if needed\n")
 
     for extension in const.SUPPORTED_AUDIO_EXTENSIONS:
 
@@ -139,5 +141,5 @@ def normalize_audiobook(book_dir: str):
         util.log_info("Audio files renaming required")
         print()
         util.log_ok("Initiated renaming sequence\n")
-        rename.rename_audiobook(const.STANDARDIZED_BOOK_PATH)
+        rename.rename_audiobook(const.STANDARDIZED_BOOK_PATH, type="In-Order Renaming")
         const.ERR_FILE_REJECTED = False
