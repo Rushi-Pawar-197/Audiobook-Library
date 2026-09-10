@@ -13,9 +13,9 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
 from utils import constants as const
-from modules import audio_dsp_cleaning as dsp
-from modules import audio_converter as converter
-from modules import edit_metadata as meta
+from modules import Audio_DSP as dsp
+from modules import Audio_Normalization as norm
+from modules import Audio_Metadata as meta
 from preprocessing import preprocessing as prep
 
 
@@ -823,8 +823,6 @@ def process_single_book(book):
     preprocess_type = book["PREPROCESS_TYPE"].strip()
     dsp_processing = book["DSP_PROCESSING"].strip().lower()
 
-    batch_dir = Path(const.BATCH_DIR)
-
     setup_logging(book_dir)
 
     valid_audio_files = config_parameters(book_dir, cover_path, author, book_name)
@@ -840,7 +838,7 @@ def process_single_book(book):
 
     new_BOOK_DIR = Path(const.STANDARDIZED_BOOK_PATH)
 
-    converter.normalize_audiobook(new_BOOK_DIR)
+    norm.normalize_audiobook(new_BOOK_DIR)
 
     meta.update_metadata(new_BOOK_DIR, cover_path, author, book_name)
 

@@ -1,5 +1,4 @@
 from pathlib import Path
-import subprocess
 import os
 import sys
 
@@ -117,16 +116,16 @@ def normalize_audio_file(input_extension: str, book_path: str):
             util.log_error(f" {src.name}: {e}")
 
     print()
-    util.log_ok(f" Audio conversion complete\n")
+    util.log_ok(f"Audio Normalization complete\n")
 
 
 def normalize_audiobook(book_dir: str):
 
     # ---------- Convert supported audio formats to the standard format (.mp3) ----------
 
-    util.stage_title_card("PHASE 2 : AUDIO CONVERSION", type="phase", char="=")
+    util.stage_title_card("PHASE 2 : AUDIO NORMALIZATION", type="phase", char="=")
     print()
-    util.log_info(f"Performing audio normalization if needed\n")
+    util.log_info(f"Performing Audio Normalization if needed\n")
 
     for extension in const.SUPPORTED_AUDIO_EXTENSIONS:
 
@@ -138,8 +137,8 @@ def normalize_audiobook(book_dir: str):
 
     if const.ERR_FILE_REJECTED:
 
-        util.log_info("Audio files renaming required")
+        util.log_info("Audio files Renaming required")
         print()
-        util.log_ok("Initiated renaming sequence\n")
+        util.log_ok("Initiated Renaming sequence\n")
         rename.rename_audiobook(const.STANDARDIZED_BOOK_PATH, type="In-Order Renaming")
         const.ERR_FILE_REJECTED = False

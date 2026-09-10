@@ -319,14 +319,26 @@ def find_stable_quiet_sections(audio, sample_rate, window_seconds=1.0):
     candidates = [
         item
         for item in measurements
-        if (item["level"] <= quiet_threshold and item["variation"] <= 6)
+        if (
+            item["level"] <= quiet_threshold
+            and item["level"] > const.NOISE_FLOOR_SILENCE_THRESHOLD_DBFS
+            and item["variation"] <= 6
+        )
     ]
 
     # If the recording does not contain enough perfectly
     # stable regions, relax the stability requirement.
+
     if len(candidates) < 3:
 
-        candidates = [item for item in measurements if item["level"] <= quiet_threshold]
+        candidates = [
+            item
+            for item in measurements
+            if (
+                item["level"] <= quiet_threshold
+                and item["level"] > const.NOISE_FLOOR_SILENCE_THRESHOLD_DBFS
+            )
+        ]
 
     # Still nothing useful?
     if not candidates:
@@ -364,11 +376,11 @@ def find_stable_quiet_sections(audio, sample_rate, window_seconds=1.0):
 
 def calculate_spectrum(audio, sample_rate):
     """
-    Calculate a normalized frequency spectrum.
+    Calculate a normalized linear-magnitude frequency spectrum.
 
-    The result is expressed relative to the strongest
-    frequency component rather than using raw FFT magnitude.
-    This makes the numbers meaningful and comparable.
+    The magnitude is normalized relative to the strongest
+    frequency component. Power calculations are performed
+    from the linear magnitude before any dB conversion.
     """
 
     if len(audio) == 0:
@@ -391,14 +403,12 @@ def calculate_spectrum(audio, sample_rate):
     if np.max(magnitude) > 0:
         magnitude = magnitude / np.max(magnitude)
 
-    magnitude_db = 20 * np.log10(np.maximum(magnitude, 1e-12))
-
-    return frequencies, magnitude_db
+    return frequencies, magnitude
 
 
-def band_energy(frequencies, spectrum_db, low, high):
+def band_energy(frequencies, magnitude, low, high):
     """
-    Calculate average relative energy within a frequency band.
+    Calculate average relative power within a frequency band.
     """
 
     mask = (frequencies >= low) & (frequencies < high)
@@ -406,15 +416,15 @@ def band_energy(frequencies, spectrum_db, low, high):
     if not np.any(mask):
         return -120.0
 
-    # Convert dB back to linear magnitude.
-    linear = 10 ** (spectrum_db[mask] / 20)
+    # Convert linear magnitude to power.
+    power = magnitude[mask] ** 2
 
-    average = np.mean(linear)
+    average_power = np.mean(power)
 
-    if average <= 1e-12:
+    if average_power <= 1e-24:
         return -120.0
 
-    return 20 * math.log10(average)
+    return 10 * math.log10(average_power)
 
 
 def analyze_frequency_bands(audio, sample_rate):
@@ -424,8 +434,7 @@ def analyze_frequency_bands(audio, sample_rate):
     Values are relative to the strongest frequency component,
     so they can be compared between recordings.
     """
-
-    frequencies, spectrum = calculate_spectrum(audio, sample_rate)
+    frequencies, magnitude = calculate_spectrum(audio, sample_rate)
 
     if frequencies is None:
         return {}
@@ -444,7 +453,10 @@ def analyze_frequency_bands(audio, sample_rate):
 
     for name, (low, high) in bands.items():
 
-        result[name] = round(band_energy(frequencies, spectrum, low, high), 2)
+        result[name] = round(
+            band_energy(frequencies, magnitude, low, high),
+            2,
+        )
 
     return result
 
@@ -981,70 +993,6 @@ def calculate_highpass(overall_severity, processing_level):
     return round(cutoff, 1)
 
 
-def build_filter_chain(
-    processing_level,
-    noise_severity,
-    hum_severity,
-    overall_severity,
-    detected_hum,
-):
-    """
-    Build the FFmpeg audio filter chain for Stage 3.
-    """
-
-    filters = []
-
-    # --------------------------------------------------------
-    # 1. HIGH-PASS FILTER
-    # --------------------------------------------------------
-
-    highpass = calculate_highpass(overall_severity, processing_level)
-
-    if highpass is not None:
-        filters.append(f"highpass=f={highpass}")
-
-    # --------------------------------------------------------
-    # 2. HUM REMOVAL
-    # --------------------------------------------------------
-
-    hum_reduction = calculate_hum_reduction(hum_severity, processing_level)
-
-    if hum_reduction > 0:
-
-        if detected_hum == "50":
-            hum_frequency = 50
-
-        elif detected_hum == "60":
-            hum_frequency = 60
-
-        else:
-            hum_frequency = None
-
-        if hum_frequency is not None:
-            filters.append(
-                f"equalizer="
-                f"f={hum_frequency}:"
-                f"t=q:"
-                f"w=2:"
-                f"g=-{hum_reduction}"
-            )
-
-    # --------------------------------------------------------
-    # 3. BROADBAND NOISE REDUCTION
-    # --------------------------------------------------------
-
-    noise_reduction = calculate_noise_reduction(noise_severity, processing_level)
-
-    if noise_reduction > 0:
-        filters.append(f"afftdn=" f"nr={noise_reduction}:" f"tn=1")
-
-    # --------------------------------------------------------
-    # FINAL FILTER CHAIN
-    # --------------------------------------------------------
-
-    return ",".join(filters)
-
-
 def clean_audio(
     input_file,
     processing_decision,
@@ -1184,19 +1132,6 @@ def clean_audio(
 # ============================================================
 
 
-# Conservative audiobook playback target.  This is intentionally a
-# fixed library target rather than a per-book average so that different
-# audiobooks in the library have a consistent listening level.
-AUDIOBOOK_TARGET_LUFS = -23.0
-
-# Prevent an unusually quiet recording from receiving an excessive gain
-# boost, even when its measured true peak would technically allow it.
-MAX_LOUDNESS_BOOST_DB = 8.0
-
-# Leave 1 dB of true-peak headroom after loudness gain.
-TRUE_PEAK_LIMIT_DB = -1.0
-
-
 def calculate_loudness_gain(source_lufs, source_true_peak_db):
     """Calculate the final per-file loudness gain.
 
@@ -1208,15 +1143,15 @@ def calculate_loudness_gain(source_lufs, source_true_peak_db):
     if source_lufs is None:
         return 0.0, None
 
-    desired_gain = AUDIOBOOK_TARGET_LUFS - source_lufs
+    desired_gain = const.AUDIOBOOK_TARGET_LUFS - source_lufs
 
     if desired_gain <= 0:
         return round(desired_gain, 2), None
 
-    limits = [(MAX_LOUDNESS_BOOST_DB, "maximum_boost")]
+    limits = [(const.MAX_LOUDNESS_BOOST_DB, "maximum_boost")]
 
     if source_true_peak_db is not None:
-        true_peak_headroom = TRUE_PEAK_LIMIT_DB - source_true_peak_db
+        true_peak_headroom = const.TRUE_PEAK_LIMIT_DB - source_true_peak_db
         limits.append((true_peak_headroom, "true_peak_limit"))
 
     positive_limit, reason = min(limits, key=lambda item: item[0])
@@ -1305,10 +1240,6 @@ def build_processing_plan(analysis):
 # ============================================================
 # METADATA HELPERS
 # ============================================================
-
-
-# def _metadata_path(book_path, filename):
-#     return Path(book_path) / filename
 
 
 def _write_json(path, data):
@@ -1460,9 +1391,9 @@ def stage2_process(book_path, stage1_metadata):
 
     metadata = {
         "loudness": {
-            "target_lufs": AUDIOBOOK_TARGET_LUFS,
-            "true_peak_limit_db": TRUE_PEAK_LIMIT_DB,
-            "max_boost_db": MAX_LOUDNESS_BOOST_DB,
+            "target_lufs": const.AUDIOBOOK_TARGET_LUFS,
+            "true_peak_limit_db": const.TRUE_PEAK_LIMIT_DB,
+            "max_boost_db": const.MAX_LOUDNESS_BOOST_DB,
         },
         "files": plans,
     }

@@ -16,6 +16,24 @@ LINE_WIDTH = 90
 METADATA_PATH = "metadata/"
 
 # ============================================================
+# Audio processing constants
+# ============================================================
+
+NOISE_FLOOR_SILENCE_THRESHOLD_DBFS = -90.0
+# Conservative audiobook playback target.  This is intentionally a
+# fixed library target rather than a per-book average so that different
+# audiobooks in the library have a consistent listening level.
+AUDIOBOOK_TARGET_LUFS = -23.0
+
+# Prevent an unusually quiet recording from receiving an excessive gain
+# boost, even when its measured true peak would technically allow it.
+MAX_LOUDNESS_BOOST_DB = 8.0
+
+# Leave 1 dB of true-peak headroom after loudness gain.
+TRUE_PEAK_LIMIT_DB = -1.0
+
+
+# ============================================================
 # BATCH CONSTANTS
 # ============================================================
 
