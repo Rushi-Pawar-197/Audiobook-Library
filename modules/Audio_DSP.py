@@ -7,6 +7,8 @@ import shutil
 from pathlib import Path
 import sys
 
+import time
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -112,11 +114,17 @@ def load_audio_for_analysis(file_path, sample_rate=16000):
 
     stderr_log = os.path.join(const.LOGS_ANALYSIS / f"{file_path.name}.stderr")
 
+    time_3 = time.time()
+
     result, diagnostic_log = util.run_ffmpeg(
         command,
         stderr_log,
         stdout=subprocess.PIPE,
     )
+
+    time_4 = time.time()
+
+    const.FFMPEG_TIME += time_4 - time_3
 
     if result.returncode != 0:
         log_location = f" See {diagnostic_log}." if diagnostic_log else ""
@@ -203,9 +211,15 @@ def calculate_loudness(file_path):
         "-",
     ]
 
+    time_5 = time.time()
+
     result = subprocess.run(
         command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
     )
+
+    time_6 = time.time()
+
+    const.FFMPEG_TIME += time_6 - time_5
 
     stderr = result.stderr
 
@@ -571,8 +585,11 @@ def calculate_hum_strength(audio, sample_rate, frequency):
     """
 
     frequencies, magnitude = calculate_hum_spectrum(audio, sample_rate)
+    calculated_hum_strength_from_spectrum_ = calculate_hum_strength_from_spectrum(
+        frequencies, magnitude, frequency
+    )
 
-    return calculate_hum_strength_from_spectrum(frequencies, magnitude, frequency)
+    return calculated_hum_strength_from_spectrum_
 
 
 def analyze_hum(audio, sample_rate):
@@ -731,12 +748,14 @@ def analyze_audio(file_path):
 
     if info["duration"] <= 0:
         raise ValueError(f"Invalid audio duration: {info['duration']} seconds.")
-
-    util.log(
-        f"Duration\t\t:  {util.format_time(info['duration'])}", indent=const.INDENT_FILE
-    )
+    duration_str = util.format_time(info["duration"])
+    util.log(f"Duration\t\t:  {duration_str}", indent=const.INDENT_FILE)
     util.log(f"Sample rate\t:  {info['sample_rate']} Hz", indent=const.INDENT_FILE)
     util.log(f"Channels\t\t:  {info['channel_layout']}", indent=const.INDENT_FILE)
+
+    if info["duration"] >= const.VALID_MAX_DURATION:
+        const.SKIP_DSP_OF_THIS_FILE = True
+        return duration_str
 
     # --------------------------------------------------------
     # LOAD AUDIO
@@ -763,7 +782,17 @@ def analyze_audio(file_path):
     # LOUDNESS
     # --------------------------------------------------------
 
+    time_55 = time.time()
+
     loudness = calculate_loudness(file_path)
+
+    time_56 = time.time()
+
+    calculate_loudness_file = time_56 - time_55
+
+    const.calculate_loudness_list.append(util.format_time(calculate_loudness_file))
+
+    const.calculate_loudness += calculate_loudness_file
 
     # --------------------------------------------------------
     # HUM
@@ -1086,7 +1115,13 @@ def clean_audio(
 
     stderr_log = const.LOGS_CLEANING / f"{input_file.name}.stderr"
 
+    time_7 = time.time()
+
     result, diagnostic_log = util.run_ffmpeg(command, stderr_log)
+
+    time_8 = time.time()
+
+    const.FFMPEG_TIME += time_8 - time_7
 
     if result.returncode != 0:
         print()
@@ -1290,7 +1325,45 @@ def stage1_analyze(book_path, audio_files):
         error_log = const.LOGS_ANALYSIS / f"{audio_file.name}.error"
 
         try:
-            files.append(analyze_audio(audio_file))
+
+            time_1 = time.time()
+
+            result = analyze_audio(audio_file)
+
+            if const.SKIP_DSP_OF_THIS_FILE == True:
+                raise util.DSP_Analysis_Error
+
+            files.append(result)
+
+            time_2 = time.time()
+
+            individual_analyze_audio = time_2 - time_1
+
+            const.analyze_audio_list.append(
+                str(util.format_time(individual_analyze_audio))
+            )
+
+            const.Entire_analyze_audio += individual_analyze_audio
+
+        except util.DSP_Analysis_Error as error:
+            failed += 1
+            util.log_file_error(
+                f"File's duration exceeds the max limit for DSP analysis : "
+                f"Expected : less than"
+                f"{util.format_time(const.VALID_MAX_DURATION)}, "
+                f"Actual : {result}",
+                error_log,
+            )
+            util.log_warning(
+                f"File's duration exceeds the max limit for DSP analysis : "
+                f"Expected : less than [bright_green]"
+                f"{util.format_time(const.VALID_MAX_DURATION)}[/bright_green], "
+                f"Actual : [orange1]{result}[orange1]"
+            )
+            util.log_info(f"Skipping DSP for this file\n")
+            const.SKIP_DSP_FILES.append(audio_file)
+            const.SKIP_DSP_OF_THIS_FILE = False
+
         except Exception as error:
             failed += 1
             const.ERR_FILE_REJECTED = True

@@ -32,6 +32,13 @@ MAX_LOUDNESS_BOOST_DB = 8.0
 # Leave 1 dB of true-peak headroom after loudness gain.
 TRUE_PEAK_LIMIT_DB = -1.0
 
+# Maximum valid duration allowed in DSP analysis (in seconds)
+VALID_MAX_DURATION = 7200
+
+SKIP_DSP_OF_THIS_FILE = False
+
+SKIP_DSP_FILES = []
+
 
 # ============================================================
 # BATCH CONSTANTS
@@ -118,3 +125,17 @@ SUPPORTED_AUDIO_EXTENSIONS = [
     ".3gp",
     ".3gpp",
 ]
+
+
+# ============================================================
+# TIME ANALYSIS CONSTANTS
+# ============================================================
+
+FFMPEG_TIME = 0
+PYTHON_TIME = 0
+PYTHON_DSP_TIME = 0
+
+Entire_analyze_audio = 0
+calculate_loudness = 0
+calculate_loudness_list = []
+analyze_audio_list = []
