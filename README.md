@@ -1,68 +1,98 @@
-# Audiobook Library
+```
+ █████╗ ██╗   ██╗██████╗ ██╗ ██████╗ ██████╗  ██████╗  ██████╗ ██╗  ██╗
+ ██╔══██╗██║   ██║██╔══██╗██║██╔═══██╗██╔══██╗██╔═══██╗██╔═══██╗██║ ██╔╝
+ ███████║██║   ██║██║  ██║██║██║   ██║██████╔╝██║   ██║██║   ██║█████╔╝ 
+ ██╔══██║██║   ██║██║  ██║██║██║   ██║██╔══██╗██║   ██║██║   ██║██╔═██╗ 
+ ██║  ██║╚██████╔╝██████╔╝██║╚██████╔╝██████╔╝╚██████╔╝╚██████╔╝██║  ██╗
+ ╚═╝  ╚═╝ ╚═════╝ ╚═════╝ ╚═╝ ╚═════╝ ╚═════╝  ╚═════╝  ╚═════╝ ╚═╝  ╚═╝
+                                                                     
+                     ██╗     ██╗██████╗ ██████╗  █████╗ ██████╗ ██╗   ██╗                   
+                     ██║     ██║██╔══██╗██╔══██╗██╔══██╗██╔══██╗╚██╗ ██╔╝                   
+                     ██║     ██║██████╔╝██████╔╝███████║██████╔╝ ╚████╔╝                    
+                     ██║     ██║██╔══██╗██╔══██╗██╔══██║██╔══██╗  ╚██╔╝                     
+                     ███████╗██║██████╔╝██║  ██║██║  ██║██║  ██║   ██║                      
+                     ╚══════╝╚═╝╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝    
+ 
+ 
+        ───────◇  Analyze  ~  Clean  ~  Standardize  ◇───────
 
-A Python and FFmpeg-based audiobook processing pipeline for cleaning, standardizing, converting, and organizing audiobook audio files.
+```
 
-The project analyzes audiobook recordings, evaluates their audio characteristics, applies an appropriate level of DSP processing, converts files where necessary, and embeds consistent metadata and cover artwork.
+A Python and FFmpeg-based audiobook processing pipeline for cleaning, normalizing, converting, and organizing audiobook collections.
 
-The goal is to take a collection of audiobook files with potentially inconsistent formats, loudness levels, noise characteristics, or metadata and produce a cleaner, more consistent audiobook library.
+Audiobook Library is designed to take a batch of audiobook recordings with inconsistent formats, loudness levels, noise characteristics, and metadata, process them according to their individual requirements, and produce a consistent audiobook library.
+
+The project uses a **batch-driven workflow**: audiobook directories and processing options are described in a CSV file, validated before processing begins, and then processed in a deterministic order.
 
 ---
 
 ## Features
 
-* Automated audiobook audio analysis
-* Adaptive DSP processing based on the characteristics of individual audio files
-* Loudness analysis and normalization
-* Noise floor and estimated signal-to-noise ratio analysis
-* Electrical hum detection and reduction
-* Frequency-domain analysis
-* Multiple processing levels based on detected audio quality
-* Persistent analysis and processing metadata
-* Resume-friendly multi-stage processing
-* Audio conversion to MP3
-* Automatic metadata embedding
-* Artist, album, title, and track number metadata
-* Embedded cover artwork
-* Detailed terminal and persistent logging
-* FFmpeg diagnostic logs for troubleshooting
-* Makefile-based setup and execution
-* Manual setup and execution as a fallback
-* Minimal user configuration
+- Batch processing of multiple audiobooks
+- CSV-driven audiobook configuration
+- Strict batch validation before processing
+- Deterministic audiobook processing order
+- Optional source preprocessing
+- Multi-stage audio analysis and DSP processing
+- Adaptive DSP processing based on recording characteristics
+- Audiobook-wide loudness analysis and normalization
+- Noise-floor and estimated signal-to-noise-ratio analysis
+- Electrical hum detection and reduction
+- Frequency-domain analysis
+- Multiple DSP processing levels
+- Persistent Stage 1 and Stage 2 processing metadata
+- Resume-friendly Stage 3 cleaning
+- Audio conversion to MP3 at 128 kbps
+- Automatic track ordering and renaming where required
+- Automatic ID3 metadata embedding
+- Optional embedded cover artwork
+- Detailed terminal output and persistent logs
+- FFmpeg diagnostic logs for troubleshooting
+- Standalone audiobook splitting utility
+- Makefile-based setup, diagnostics, execution, and utilities
 
 ---
 
 # How It Works
 
-The project processes an audiobook through a multi-phase pipeline.
+The project processes each audiobook through a multi-phase pipeline.
 
 ```text
-Raw Audiobook Files
-        │
-        ▼
-Optional Preprocessing
-        │
-        ▼
-Phase 1 — Analysis & DSP Processing
-        │
-        ├── Stage 1: Audio Analysis
-        │
-        ├── Stage 2: Processing Plan Generation
-        │
-        └── Stage 3: Processing Execution
-        │
-        ▼
-Phase 2 — Audio Conversion
-        │
-        ▼
-Phase 3 — Metadata & Cover Art
-        │
-        ▼
-Processed Audiobook Library
+Batch CSV
+    │
+    ▼
+Batch Validation
+    │
+    ▼
+┌─────────────────────────────────────┐
+│ PHASE 1 — AUDIO CLEANING            │
+│                                     │
+│ Optional Preprocessing              │
+│          ↓                          │
+│ Stage 1 — Analyze                   │
+│          ↓                          │
+│ Stage 2 — Processing Plan           │
+│          ↓                          │
+│ Stage 3 — Cleaning / DSP Execution  │
+└─────────────────────────────────────┘
+    │
+    ▼
+PHASE 2 — AUDIO NORMALIZATION
+    │
+    ├── Convert supported formats to MP3
+    └── Rename tracks when required
+    │
+    ▼
+PHASE 3 — METADATA
+    │
+    ├── Write ID3 metadata
+    └── Embed cover artwork when available
+    │
+    ▼
+Processed Audiobook
 ```
 
-The pipeline deliberately separates **analysis**, **decision-making**, and **processing**.
-
-Audio characteristics are analyzed first, processing decisions are generated and stored, and the resulting processing plan is then executed without unnecessarily repeating the analysis.
+The DSP pipeline deliberately separates **analysis**, **decision-making**, and **execution**. Stage 1 analyzes the source audio, Stage 2 generates the processing plan for the complete audiobook, and Stage 3 executes those persisted decisions.
 
 ---
 
@@ -72,28 +102,28 @@ Audio characteristics are analyzed first, processing decisions are generated and
 
 The project requires:
 
-* Python 3
-* FFmpeg, including FFprobe
+- Python 3
+- FFmpeg
+- FFprobe
+- GNU Make (recommended)
 
-FFmpeg and FFprobe must be installed and available through your system's `PATH`.
+FFmpeg and FFprobe must be available through the system `PATH`.
 
-### Recommended
+The Python dependencies are listed in `requirements.txt`.
 
-For the recommended setup and execution workflow, the project also uses:
+### FFmpeg installation
 
-* GNU Make
+`make setup` attempts to install FFmpeg automatically on supported Linux and macOS systems when it is missing. On Windows, FFmpeg must be installed separately and made available through `PATH`.
 
-GNU Make is used as a convenience layer for automatically setting up the Python environment and running the project.
-
-If `make` is unavailable or causes platform-specific issues, the project can also be set up and run manually.
+If automatic installation is unavailable on your system, install FFmpeg manually and ensure both `ffmpeg` and `ffprobe` can be executed from a terminal.
 
 ---
 
 ## Clone the Repository
 
 ```bash
-git clone https://github.com/Rushi-Pawar-197/Audiobook-Library
-cd "Audiobook Library"
+git clone https://github.com/Rushi-Pawar-197/Audiobook-Library.git
+cd Audiobook-Library
 ```
 
 ---
@@ -106,18 +136,37 @@ Run:
 make setup
 ```
 
-This automatically creates the project's Python virtual environment, if necessary, and installs the required Python dependencies.
+The setup process:
+
+1. Checks for FFmpeg and FFprobe.
+2. Creates the Python virtual environment if necessary.
+3. Detects and recreates an incomplete or incompatible virtual environment when necessary.
+4. Installs the Python dependencies from `requirements.txt`.
+
+The virtual-environment check is intentional: the existence of a `venv` directory alone does not mean that the environment is usable.
+
+---
+
+## Environment Diagnostics
+
+To inspect the current environment without running the audiobook processor:
+
+```bash
+make doctor
+```
+
+This checks the system Python, virtual environment, pip, Python dependencies, FFmpeg, and FFprobe.
 
 ---
 
 ## Manual Setup
 
-If GNU Make is unavailable or the Makefile does not work correctly on your system, the project can be set up manually.
+If GNU Make is unavailable, the project can be configured manually.
 
 ### Create a Virtual Environment
 
 ```bash
-python -m venv venv
+python3 -m venv venv
 ```
 
 ### Activate the Virtual Environment
@@ -143,327 +192,520 @@ venv\Scripts\Activate.ps1
 ### Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 ---
 
-# Usage
+# Batch Processing
 
-Using the project requires only three steps.
+Audiobook Library no longer uses the old single-book `config.py` workflow. Current processing is controlled by a **batch directory** and a CSV metadata file.
 
-## 1. Configure the Audiobook
+The batch directory is currently configured through `BATCH_DIR` in:
 
-Open `config.py` and provide the required audiobook information:
-
-```python
-BOOK_DIR = ""
-COVER_PATH = ""
-ARTIST = ""
-ALBUM = ""
+```text
+utils/constants.py
 ```
 
-### `BOOK_DIR`
-
-The path to the directory containing the audiobook audio files.
-
-### `COVER_PATH`
-
-The path to the cover image that will be embedded into the processed audiobook files.
-
-### `ARTIST`
-
-The artist or author name to be written into the audio metadata.
-
-### `ALBUM`
-
-The album or audiobook title to be written into the audio metadata.
-
-`config.py` is the user-facing configuration file. The remaining project constants are internal implementation values and do not normally need to be modified.
+`BATCH_DIR` is an implementation-level configuration value for now and may be moved to a more user-facing configuration mechanism in a future version.
 
 ---
 
-## 2. Ensure the Audiobook Files Are Ready
+## Batch Directory Structure
 
-Ensure that `BOOK_DIR` points to the directory containing the audiobook files you want to process.
+A batch directory should contain one CSV metadata file, one directory for each audiobook listed in the CSV, and optionally a `covers` directory.
 
-The project discovers and processes supported audio files according to the configured processing pipeline.
+A typical batch looks like:
+
+```text
+batch/
+├── audiobook_metadata.csv
+├── Dune/
+│   ├── chapter 01.m4b
+│   ├── chapter 02.m4b
+│   └── ...
+├── Foundation/
+│   ├── chapter 01.mp3
+│   ├── chapter 02.mp3
+│   └── ...
+└── covers/
+    ├── Dune.jpg
+    └── Foundation.png
+```
+
+The CSV filename itself is not fixed. The batch loader expects **exactly one CSV file** in the batch directory.
+
+Extra audiobook directories that are not listed in the CSV are ignored during batch validation.
 
 ---
 
-## 3. Run the Project
+# Batch CSV
 
-### Recommended
+The CSV must contain exactly the required fields used by the current batch processor:
+
+```text
+book_id,AUTHOR,BOOK,PREPROCESS,PREPROCESS_TYPE,DSP_PROCESSING
+```
+
+Example:
+
+```csv
+book_id,AUTHOR,BOOK,PREPROCESS,PREPROCESS_TYPE,DSP_PROCESSING
+1,Frank Herbert,Dune,y,1,y
+2,Isaac Asimov,Foundation,n,1,y
+3,Isaac Asimov,The Caves of Steel,n,1,n
+```
+
+## CSV Fields
+
+| Field | Description |
+|---|---|
+| `book_id` | Unique positive natural number. It determines processing order. IDs must form a complete sequence from `1` to the number of books in the CSV. |
+| `AUTHOR` | Author/artist value written to the audiobook metadata. Required. |
+| `BOOK` | Audiobook title and the name used to locate the corresponding book directory and cover. Required and case-insensitively unique. |
+| `PREPROCESS` | Whether source preprocessing is enabled: `y` or `n`. |
+| `PREPROCESS_TYPE` | Preprocessing mode. Currently `1` or `2` when preprocessing is enabled. (refer section for info)|
+| `DSP_PROCESSING` | Whether DSP processing is enabled: `y` or `n`. |
+
+### `book_id`
+
+`book_id` is the primary key for each audiobook entry and has two purposes:
+
+1. It uniquely identifies the audiobook within the batch.
+2. It defines the processing order.
+
+The IDs must be positive natural numbers and must form a complete sequence beginning at `1`.
+
+Valid:
+
+```text
+1, 2, 3, 4
+```
+
+Invalid:
+
+```text
+1, 2, 4
+```
+
+Invalid:
+
+```text
+1, 2, 2, 3
+```
+
+Invalid:
+
+```text
+0, 1, 2
+```
+
+The processor sorts the validated books by `book_id` before processing.
+
+### `AUTHOR`
+
+The author value is written to the final audio metadata as the artist.
+
+It must not be empty.
+
+### `BOOK`
+
+The book name is used as the logical audiobook title and to locate the corresponding directory and cover artwork.
+
+Book names must be unique within the CSV, case-insensitively.
+
+### `PREPROCESS`
+
+Set this to:
+
+```text
+y
+```
+
+to enable preprocessing, or:
+
+```text
+n
+```
+
+to skip it.
+
+### `PREPROCESS_TYPE`
+
+When `PREPROCESS=y`, the preprocessing type must currently be either:
+
+```text
+1
+```
+
+or:
+
+```text
+2
+```
+
+Where 1 is for "Disk-Subfolder" audiobook structure, and 2 is "In-order rename" audiobook structure.
+
+When preprocessing is disabled, this field is not used for processing decisions.
+
+### `DSP_PROCESSING`
+
+Set this to `y` to run the DSP analysis/cleaning pipeline or `n` to skip DSP processing.
+
+---
+
+# Batch Validation
+
+Before processing begins, the complete batch is validated.
+
+Validation includes:
+
+- A CSV metadata file must exist.
+- Exactly one CSV file must be present in the batch directory.
+- All required CSV fields must be present.
+- `book_id` values must be positive natural numbers.
+- `book_id` values must be unique.
+- `book_id` values must form the complete sequence `1...N`.
+- `AUTHOR` must not be empty.
+- `BOOK` must not be empty.
+- `BOOK` names must be unique, case-insensitively.
+- `PREPROCESS` must be `y` or `n`.
+- `PREPROCESS_TYPE` must be `1` or `2` when preprocessing is enabled.
+- `DSP_PROCESSING` must be `y` or `n`.
+- Every `BOOK` must have exactly one matching audiobook directory, ignoring case.
+
+If batch validation fails, processing is aborted before any audiobook is processed.
+
+After validation, the program displays the batch and asks for confirmation before starting processing.
+
+---
+
+# Audiobook Directories
+
+Each audiobook listed in `BOOK` must have a corresponding directory directly inside the batch directory.
+
+Directory matching is **case-insensitive**.
+
+For example, if the CSV contains:
+
+```text
+BOOK = Dune
+```
+
+then a directory named any of the following will match:
+
+```text
+Dune/
+dune/
+DUNE/
+```
+
+More than one case-insensitive match is treated as an error.
+
+---
+
+# Cover Artwork
+
+Cover artwork is optional.
+
+If a `covers` directory exists, the cover filename must have the same base name as the corresponding `BOOK` directory, with matching performed case-insensitively.
+
+Supported cover formats are:
+
+```text
+.jpg
+.jpeg
+.png
+.webp
+```
+
+For example:
+
+```text
+batch/
+├── Dune/
+└── covers/
+    └── dune.jpg
+```
+
+matches the audiobook directory `Dune/`.
+
+A missing cover is **not a fatal validation error**. The user is warned, processing continues, and the final audiobook is produced without embedded cover artwork.
+
+Multiple matching covers for the same audiobook are treated as a validation error.
+
+---
+
+# Running the Processor
+
+Once the batch directory and CSV have been prepared, run:
 
 ```bash
 make run
 ```
 
-This runs the project through the `main.py` entry point using the configuration provided in `config.py`.
+The application loads the batch, validates it, asks for confirmation, and processes each audiobook in `book_id` order.
 
-### Manual
+The main application entry point is:
 
-If you are using the manual setup method, activate the virtual environment and run:
-
-```bash
-python main.py
+```text
+main.py
 ```
 
-The manual method uses the same application entry point and processing pipeline as the Makefile-based workflow.
+---
+
+# Processing Pipeline
+
+## Phase 1 — Audio Cleaning
+
+Phase 1 performs optional preprocessing followed by the DSP pipeline.
+
+### Optional Preprocessing
+
+The preprocessing stage is controlled independently for each audiobook through `PREPROCESS` and `PREPROCESS_TYPE`.
+
+### Stage 1 — Analyze
+
+Stage 1 analyzes every source audio file in the audiobook and persists the results to:
+
+```text
+metadata/stage1_metadata.json
+```
+
+Analysis includes measurements such as:
+
+- Technical audio properties
+- Loudness
+- RMS levels
+- Peak levels
+- Noise-floor estimation
+- Estimated signal-to-noise ratio
+- Electrical hum
+- Frequency-domain characteristics
+
+FFprobe is used for technical inspection, while FFmpeg is used for audio analysis.
+
+### Stage 2 — Processing
+
+Stage 2 reads the complete Stage 1 dataset and generates a processing plan for the audiobook.
+
+The resulting decisions are persisted to:
+
+```text
+metadata/stage2_metadata.json
+```
+
+Processing decisions can include different levels of cleaning depending on the characteristics of the recording, rather than applying the same aggressive filter chain to every file.
+
+Stage 2 also makes the audiobook-wide loudness decision.
+
+### Stage 3 — Cleaning
+
+Stage 3 executes the persisted Stage 2 processing plans.
+
+Existing completed output files can be treated as completed work, allowing this stage to resume without unnecessarily repeating previous processing.
 
 ---
 
-# Technical Pipeline
+# Loudness Normalization
 
-## Phase 1 — Audio Analysis and DSP Processing
-
-Phase 1 is divided into three distinct stages.
-
----
-
-## Stage 1 — Audio Analysis
-
-Each audio file is analyzed before processing decisions are made.
-
-The analysis includes measurements and estimates such as:
-
-* Technical audio properties
-* Loudness
-* RMS levels
-* Peak levels
-* Noise floor estimation
-* Estimated signal-to-noise ratio
-* Electrical hum
-* Frequency-domain characteristics
-
-FFprobe is used to inspect audio properties, while FFmpeg is used for decoding and audio analysis.
-
-The analysis results are persisted for use by later stages.
-
----
-
-## Stage 2 — Processing Plan Generation
-
-The analysis results are used to determine how aggressively each file should be processed.
-
-The project evaluates characteristics such as:
-
-* Noise severity
-* Hum severity
-* Loudness requirements
-* Frequency characteristics
-
-Based on these measurements, the pipeline generates a processing plan for each audio file.
-
-The processing plans can select different cleaning levels:
-
-* `minimal`
-* `moderate`
-* `standard`
-
-This allows relatively clean recordings to avoid unnecessary processing while recordings with more significant issues can receive stronger treatment.
-
-The resulting decisions are persisted so that the next stage can execute them directly.
-
----
-
-## Stage 3 — Processing Execution
-
-Stage 3 performs the actual audio processing.
-
-Instead of repeating the complete analysis, this stage consumes the processing decisions generated previously.
-
-Depending on the requirements of an individual file, processing can involve FFmpeg filters and operations such as:
-
-* High-pass filtering
-* Hum reduction
-* Frequency correction
-* Noise reduction
-* Loudness adjustment
-
-The processing pipeline therefore adapts its treatment to the characteristics of individual recordings instead of applying the same aggressive filter chain to every file.
-
----
-
-# Audio Processing
-
-## Loudness Processing
-
-The project analyzes loudness using FFmpeg loudness measurement.
-
-The processing pipeline is designed around a target loudness of approximately:
+Audiobook loudness is normalized toward a fixed library target of:
 
 ```text
 -23 LUFS
 ```
 
-Loudness adjustments also account for constraints intended to prevent excessive gain and undesirable output peaks.
+The loudness processing also applies safety constraints:
+
+- Maximum loudness boost: `+8 dB`
+- True-peak limit/headroom target: `-1 dB`
+
+The goal is to keep different audiobooks at a consistent listening level while preventing unusually quiet source material from receiving excessive gain.
+
+## Loudness Analysis Performance
+
+The loudness-analysis path has been optimized to reduce the amount of repeated audio decoding required during DSP analysis.
+
+This substantially reduces the time spent on loudness normalization analysis while preserving the same processing objective.
 
 ---
 
-## Noise Analysis and Reduction
+# Long Audiobooks and DSP
 
-The project estimates noise characteristics by examining relatively quiet and stable portions of a recording.
+DSP analysis is intentionally limited to audio files shorter than the configured maximum duration.
 
-These measurements are used to estimate the noise floor and determine whether noise reduction is necessary.
-
-When appropriate, FFmpeg-based noise reduction can be applied.
-
----
-
-## Hum Detection
-
-The frequency-domain analysis includes detection of electrical hum, particularly around common mains frequencies such as:
+The current limit is:
 
 ```text
-50 Hz
-60 Hz
+7200 seconds (2 hours)
 ```
 
-The analysis also considers harmonic characteristics when evaluating hum.
+Files at or beyond this limit are excluded from DSP analysis.
 
-When significant hum is detected, the processing plan can include appropriate corrective filtering.
-
----
-
-## Frequency Analysis
-
-The pipeline performs FFT-based frequency analysis to examine broad spectral characteristics of the recording.
-
-These measurements contribute to the processing decisions generated for each audio file.
+This is intentional: very large monolithic audiobook files can make DSP analysis disproportionately expensive. The standalone audiobook splitter can be used to divide such files into smaller parts before processing.
 
 ---
 
-# Phase 2 — Audio Conversion
+# Phase 2 — Audio Normalization
 
-After DSP processing, audio files that require conversion are converted to the project's target output format.
+Phase 2 converts supported non-MP3 source formats into MP3.
 
-The conversion stage produces MP3 output where necessary and helps create a more consistent audiobook library.
-
----
-
-# Phase 3 — Metadata and Cover Art
-
-After audio processing and conversion, metadata is applied to the final audio files.
-
-The project can embed information such as:
-
-* Track title
-* Artist
-* Album
-* Track number
-* Cover artwork
-
-The artist and album information are configured through `config.py`.
-
-The cover image specified by `COVER_PATH` is embedded into the processed audiobook files.
-
-This ensures that the final audiobook files are not only processed consistently, but are also properly identifiable in audiobook and media applications.
-
----
-
-# Persistent Processing Metadata
-
-The processing pipeline stores intermediate metadata so that analysis, planning, and execution remain separate.
-
-Generated processing information includes files such as:
+The current output settings are:
 
 ```text
-stage1_metadata.json
-stage2_metadata.json
+Format: MP3
+Codec:  libmp3lame
+Bitrate: 128 kbps
 ```
 
-Conceptually:
+Supported source extensions include common formats such as:
 
 ```text
-Stage 1
-Audio Analysis
-      │
-      ▼
-stage1_metadata.json
-      │
-      ▼
-Stage 2
-Processing Decisions
-      │
-      ▼
-stage2_metadata.json
-      │
-      ▼
-Stage 3
-Processing Execution
+.mp3  .mp2  .aac  .m4a  .m4b
+.flac .wav  .aiff .aif  .ape  .wv .tta
+.ogg  .oga  .opus
+.wma
+.ac3  .eac3
+.amr  .3gp  .3gpp
 ```
 
-This structure avoids unnecessary re-analysis and makes the multi-stage processing workflow easier to inspect and resume.
+MP3 files do not need conversion.
+
+When required, the project also performs audiobook track renaming/order normalization after conversion.
+
+---
+
+# Phase 3 — Metadata
+
+Phase 3 writes metadata to the final MP3 files.
+
+The following information is written:
+
+- Title
+- Artist / author
+- Album / audiobook name
+- Track number
+
+Track numbers are derived from the filename where possible and otherwise fall back to the file's position in the sorted track list.
+
+Cover artwork is embedded when a matching cover was found during batch validation.
+
+---
+
+# Audiobook Split Utility
+
+The project includes a standalone utility for splitting large, monolithic audiobook files into smaller segments.
+
+It is primarily intended for audiobooks that exceed the DSP duration limit or are otherwise inconvenient to process as a single file.
+
+## Using the Splitter
+
+The recommended Makefile interface is:
+
+```bash
+make split <file>
+```
+
+For example:
+
+```bash
+make split "/path/to/My Audiobook.m4b"
+```
+
+The underlying utility can also be run directly:
+
+```bash
+python utils/split.py "/path/to/My Audiobook.m4b"
+```
+
+The default segment length is:
+
+```text
+60 minutes
+```
+
+The default is configurable through:
+
+```python
+DEFAULT_PART_MINUTES = 60
+```
+
+in `utils/constants.py`.
+
+The 60-minute value is the recommended default but is not a hard-coded limitation of the splitter.
+
+## Split Behavior
+
+The splitter:
+
+- Uses FFmpeg stream copying (`-c copy`) rather than re-encoding the audio.
+- Produces segments using the original file extension.
+- Names segments using the pattern:
+
+```text
+Original Name - part 01.ext
+Original Name - part 02.ext
+...
+```
+
+- Verifies that output segments exist and are non-empty.
+- Uses FFprobe to verify that each output segment contains an audio stream.
+- Preserves the original file if splitting or verification fails.
+- Removes the original file only after successful verification of the split output.
+
+Because the splitter uses stream copying, it is designed to avoid unnecessary quality loss and re-encoding time.
 
 ---
 
 # Logging
 
-The project produces detailed output throughout execution.
+The project produces detailed terminal output and persistent logs.
 
 ## Terminal Output
 
-Terminal output is formatted for readability and provides visibility into the progress of the processing pipeline.
-
-Processing stages, files, operations, and important events are reported as the project runs.
-
----
+Terminal output reports batch validation, audiobook progress, processing stages, warnings, errors, and completion status.
 
 ## Persistent Logs
 
-Execution logs are stored in the project's logging directory.
+Logs are stored under:
 
-The persistent logs provide a readable record of processing activity.
+```text
+logs/
+├── complete_logs/
+└── err_logs/
+```
 
-Terminal formatting and ANSI control sequences are stripped from file logs so they remain readable when opened directly in a text editor.
-
----
+Per-audiobook error logs are maintained when processing failures occur.
 
 ## FFmpeg Diagnostics
 
-FFmpeg operations can produce detailed diagnostic information.
+FFmpeg diagnostic information is retained where appropriate to help investigate:
 
-Additional logs are retained where appropriate to help investigate:
-
-* Failed FFmpeg commands
-* Processing errors
-* Conversion issues
-* Unexpected audio-processing behaviour
-
-These logs can be useful when troubleshooting a particular audiobook file.
-
----
-
-# Safety and File Handling
-
-The project is designed as a multi-stage processing pipeline rather than a one-step transformation.
-
-Files move through analysis, processing, conversion, and metadata stages before final processing is complete.
-
-Intermediate metadata and processing results allow the pipeline to track progress across these stages.
-
-However, audio processing can involve multiple file transformations. For important or irreplaceable audiobook files, maintaining a separate backup of the original files is always recommended.
-
-It is also advisable to test the project on a small audiobook collection before processing a large or important library.
+- Failed FFmpeg commands
+- Decoding problems
+- Processing errors
+- Conversion failures
+- Unexpected audio behavior
 
 ---
 
 # Generated Files
 
-During processing, the project can generate supporting files and directories.
+The exact files generated depend on the audiobook and processing path, but important supporting data includes:
 
-Examples include:
+```text
+metadata/
+    stage1_metadata.json
+    stage2_metadata.json
+```
+
+and project logs under:
 
 ```text
 logs/
-stage1_metadata.json
-stage2_metadata.json
 ```
 
-These files support logging, audio analysis, processing decisions, and execution of the multi-stage pipeline.
-
-Additional intermediate files may be generated depending on the source audiobook formats and processing operations required.
+A processed audiobook also receives a `Standardized_Audiobook` output directory during the DSP pipeline before later phases operate on the standardized audio.
 
 ---
 
@@ -472,128 +714,200 @@ Additional intermediate files may be generated depending on the source audiobook
 A simplified project structure is:
 
 ```text
-Audiobook Library/
+Audiobook-Library/
 │
 ├── main.py
-├── config.py
 ├── Makefile
 ├── requirements.txt
+├── README.md
+│
+├── modules/
+│   ├── Audio_DSP.py
+│   ├── Audio_Normalization.py
+│   └── Audio_Metadata.py
+│
+├── preprocessing/
+│   ├── preprocessing.py
+│   ├── in_order_rename.py
+│   └── disk_subfolder_structure.py
 │
 ├── utils/
 │   ├── constants.py
-│   └── ...
+│   ├── split.py
+│   └── utility.py
 │
 ├── logs/
-│
-└── ...
+└── assets/
 ```
 
 ## Important Files
 
 ### `main.py`
 
-The main application entry point.
-
-The project is executed through this file when running:
-
-```bash
-make run
-```
-
-or manually:
-
-```bash
-python main.py
-```
-
----
-
-### `config.py`
-
-The user-facing configuration file.
-
-This is where the audiobook directory, cover artwork, artist, and album information are configured.
-
-```python
-BOOK_DIR = ""
-COVER_PATH = ""
-ARTIST = ""
-ALBUM = ""
-```
-
----
+Main application entry point. It loads the batch, validates it, requests confirmation, and starts batch processing.
 
 ### `utils/constants.py`
 
-Contains internal application constants used by the processing pipeline.
+Contains project-wide constants, including the current `BATCH_DIR`, DSP limits, loudness targets, supported audio extensions, and the default audiobook split length.
 
-Users normally do not need to modify this file.
+### `utils/utility.py`
 
----
+Contains the batch loading and validation logic, processing orchestration, logging helpers, and other shared utilities.
+
+### `modules/Audio_DSP.py`
+
+Implements the Stage 1 analysis, Stage 2 processing-plan generation, and Stage 3 DSP execution pipeline.
+
+### `modules/Audio_Normalization.py`
+
+Handles conversion of supported audio formats to the project's standard MP3 output and performs track renaming when required.
+
+### `modules/Audio_Metadata.py`
+
+Writes final ID3 metadata and embeds cover artwork when available.
+
+### `utils/split.py`
+
+Standalone lossless audiobook splitting utility.
 
 ### `Makefile`
 
-Provides the recommended interface for setting up and running the project.
+Provides the recommended command-line interface for setup, diagnostics, processing, splitting, and cleanup.
 
-```bash
-make setup
-make run
-```
+---
+
+# Makefile Commands
+
+| Command | Purpose |
+|---|---|
+| `make setup` | Check system dependencies, create/repair the virtual environment, and install Python dependencies. |
+| `make doctor` | Diagnose the Python environment, dependencies, FFmpeg, and FFprobe. |
+| `make run` | Run the batch audiobook processor. |
+| `make split <file>` | Split one audiobook using the configured default segment length. |
+| `make clean` | Remove Python `__pycache__` directories. |
 
 ---
 
 # Typical Workflow
 
-A typical audiobook processing workflow looks like this:
+## 1. Set Up the Environment
 
 ```bash
-# Set up the project
 make setup
 ```
 
-Configure the audiobook information in:
+## 2. Configure the Batch Directory
+
+Set `BATCH_DIR` in:
 
 ```text
-config.py
+utils/constants.py
 ```
 
-Then run:
+## 3. Prepare the Batch
+
+Create a batch directory containing:
+
+```text
+batch/
+├── audiobook_metadata.csv
+├── Book One/
+├── Book Two/
+├── Book Three/
+└── covers/
+```
+
+Ensure that the CSV contains valid sequential `book_id` values and that every `BOOK` entry has a matching audiobook directory.
+
+## 4. Run Diagnostics if Needed
+
+```bash
+make doctor
+```
+
+## 5. Process the Batch
 
 ```bash
 make run
 ```
 
-The project then performs its configured processing pipeline:
+The program validates the entire batch and asks for confirmation before processing begins.
 
-```text
-Analyze Audio
-      ↓
-Generate Processing Plans
-      ↓
-Process Audio
-      ↓
-Convert Files
-      ↓
-Apply Metadata
-      ↓
-Embed Cover Art
+## 6. Split Large Source Files When Necessary
+
+For monolithic files that exceed the DSP duration limit:
+
+```bash
+make split "/path/to/large audiobook.m4b"
 ```
+
+Then use the resulting segments as the source material for processing.
+
+---
+
+# Safety and File Handling
+
+Audiobook processing modifies and creates files during several stages. For important or irreplaceable recordings, keep a separate backup of the original source material.
+
+The splitter provides an additional safety measure: it verifies its generated segments before deleting the original monolithic file.
+
+It is recommended to test the pipeline on a small batch before processing a large audiobook collection.
+
+---
+
+# Release History
+
+## v2.2.0 — Audiobook Split Utility and Loudness Performance
+
+- Added a standalone audiobook splitting utility.
+- Added configurable split length with a 60-minute default.
+- Split output is verified with FFprobe before the source file is removed.
+- Improved the runtime of loudness normalization analysis by reducing unnecessary audio decoding work.
+- Added handling for audiobook files that exceed the DSP analysis duration limit.
+- Updated the project documentation to reflect the current batch-processing architecture.
+
+## v2.1.0 — DSP Analysis Optimization and Audiobook-Wide Loudness Normalization
+
+- Optimized DSP analysis.
+- Added audiobook-wide loudness normalization.
+- Introduced a fixed audiobook loudness target and loudness safety constraints.
+
+## v2.0.1 — Logging and Reliability Improvements
+
+- Improved logging presentation and terminal UX.
+- Added logging-related fixes and reliability improvements.
+
+## v2.0.0 — Unified Batch Audiobook Processing
+
+- Introduced the unified batch audiobook processing architecture.
+- Replaced the earlier single-audiobook workflow with CSV-driven batch processing.
+
+## v1.1.1 — Logging and Terminal UX
+
+- Improved logging and terminal presentation.
+
+## v1.1.0 — Processing Architecture and Optimization
+
+- Introduced the staged audiobook processing architecture.
+- Added processing and performance improvements.
+
+## v1.0.0 — Initial Baseline
+
+- Initial Python-based audiobook processing pipeline.
 
 ---
 
 # Notes
 
-This project is designed specifically around audiobook processing rather than general-purpose music production.
+Audiobook Library is designed specifically for audiobook processing rather than general-purpose music production.
 
-The DSP pipeline attempts to make processing decisions based on the characteristics of each recording instead of applying the same processing chain to every audio file.
+Source recordings can vary significantly in quality. Processing results therefore depend on factors such as:
 
-Because source recordings can vary significantly in quality, processing results may depend on factors such as:
+- Original recording quality
+- Background noise
+- Electrical hum
+- Dynamic range
+- Source format
+- Existing loudness characteristics
 
-* Original recording quality
-* Background noise
-* Electrical hum
-* Source format
-* Dynamic range
-* Loudness characteristics
-
-For important or irreplaceable audiobook files, keeping a separate backup of the original files is always recommended.
+The DSP pipeline is intentionally conservative: it attempts to make processing decisions from measured characteristics rather than applying the same aggressive processing chain to every recording.

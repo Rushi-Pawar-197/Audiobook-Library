@@ -26,23 +26,12 @@ def main():
 
 
 if __name__ == "__main__":
-    start_T = time.time()
+    start = time.perf_counter()
 
     main()
 
-    end_T = time.time()
-    total_T = end_T - start_T
+    elapsed = time.perf_counter() - start
 
-    const.PYTHON_TIME = total_T - const.FFMPEG_TIME
-
-    print(f"\nTotal execution time: {util.format_time(total_T)}")
-
-    print(f"\nFFMPEG time : {util.format_time(const.FFMPEG_TIME)}")
-    print(f"\nTotal Python time: {util.format_time(const.PYTHON_TIME)}")
-    print(
-        f"\nDSP module time (within python): {util.format_time(const.PYTHON_DSP_TIME)}"
+    util.log(
+        f"\nTotal execution time: [bright_white]{util.format_time(elapsed)}[/bright_white]"
     )
-    print("\n\n")
-    print(f"\n calculate_loudness : {util.format_time(const.calculate_loudness)}")
-    print(f"\n Entire_analyze_audio : {util.format_time(const.Entire_analyze_audio)}")
-    print(f"\n calculate_loudness_list : {const.calculate_loudness_list}")

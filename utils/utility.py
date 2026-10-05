@@ -406,7 +406,7 @@ def cleanup(book_path, dsp_processing):
     # SUCCESS
     # ========================================================
 
-    log_ok("Audiobook cleanup completed.")
+    log_ok("Audiobook cleanup completed\n")
 
     return True
 
@@ -418,7 +418,7 @@ def load_batch():
 
     # batch_dir = Path("/home/rushikesh/Audiobooks/Unprocessed/batch/")
 
-    batch_dir = Path("/home/rushikesh/Audiobooks/Unprocessed/Test_batch/")
+    batch_dir = Path(const.BATCH_DIR)
 
     if not batch_dir.is_dir():
         log_error(f"Batch directory not found: {batch_dir}")
@@ -463,244 +463,6 @@ def load_batch():
         "metadata_path": metadata_path,
         "books": books,
     }
-
-
-# def validate_batch(batch):
-
-#     batch_dir = batch["directory"]
-#     books = batch["books"]
-
-#     batch_valid = True
-
-#     required_fields = const.REQUIRED_FIELDS
-
-#     log_info("Checking batch configuration\n")
-
-#     # -------------------------------------------------------------------------
-#     # CSV STRUCTURE
-#     # -------------------------------------------------------------------------
-
-#     if not books:
-#         log_error("No audiobook entries found in audiobook_metadata.csv")
-#         terminate_program()
-
-#     # -------------------------------------------------------------------------
-#     # REQUIRED CSV FIELDS
-#     # -------------------------------------------------------------------------
-
-#     csv_fields = set(books[0].keys())
-
-#     missing_fields = required_fields - csv_fields
-
-#     if missing_fields:
-
-#         for field in missing_fields:
-#             log_error(f"Required CSV field missing: {field}")
-
-#         log_error("Batch validation failed")
-#         terminate_program()
-
-#     # -------------------------------------------------------------------------
-#     # BOOK DIRECTORY COUNT
-#     # -------------------------------------------------------------------------
-
-#     book_dirs = [
-#         path for path in batch_dir.iterdir() if path.is_dir() and path.name != "covers"
-#     ]
-
-#     if len(book_dirs) != len(batch["books"]):
-#         log_error(
-#             f"Batch contains {len(batch['books'])} CSV entries but "
-#             f"{len(book_dirs)} book directories."
-#         )
-#         batch_valid = False
-
-#     # -------------------------------------------------------------------------
-#     # BOOK VALIDATION
-#     # -------------------------------------------------------------------------
-
-#     book_ids = []
-#     book_names = []
-
-#     for i, book in enumerate(books, start=1):
-
-#         book["book_path"] = None
-#         book["cover_path"] = None
-
-#         book_valid = True
-
-#         book_id = book["book_id"].strip()
-#         author = book["AUTHOR"].strip()
-#         book_name = book["BOOK"].strip()
-#         preprocess = book["PREPROCESS"].strip().lower()
-#         preprocess_type = book["PREPROCESS_TYPE"].strip()
-#         dsp_processing = book["DSP_PROCESSING"].strip().lower()
-
-#         # -----------------------------------------------------
-#         # BOOK ID
-#         # -----------------------------------------------------
-
-#         if not book_id.isdigit() or int(book_id) <= 0:
-#             log_error(
-#                 f"Book ID '{book_id}' is invalid. "
-#                 "Book ID must be a positive natural number."
-#             )
-#             book_valid = False
-#         else:
-#             book_id_int = int(book_id)
-
-#         if book_id in book_ids:
-#             log_error(f"Duplicate book ID found: {book_id}")
-#             book_valid = False
-#         else:
-#             book_ids.append(book_id)
-
-#         # -----------------------------------------------------
-#         # AUTHOR / BOOK NAME
-#         # -----------------------------------------------------
-
-#         if not author:
-
-#             log_error(f"Author missing for Book {book_id_int}")
-#             book_valid = False
-#             batch_valid = False
-
-#         if not book_name:
-
-#             log_error(f"Book name missing for Book {book_id_int}")
-#             book_valid = False
-#             batch_valid = False
-
-#         normalized_book_name = book_name.casefold()
-
-#         if normalized_book_name in book_names:
-#             log_error(f"Duplicate BOOK entry found: '{book_name}'.")
-#             book_valid = False
-#         else:
-#             book_names.append(normalized_book_name)
-
-#         # -----------------------------------------------------
-#         # PREPROCESSING
-#         # -----------------------------------------------------
-
-#         if preprocess not in {"y", "n"}:
-
-#             log_error(
-#                 f"Invalid DSP_PROCESSING value '{preprocess}' "
-#                 f"for Book {book_id_int}"
-#             )
-
-#             book_valid = False
-#             batch_valid = False
-
-#         if preprocess == "y":
-
-#             if preprocess_type not in {"1", "2"}:
-
-#                 log_error(
-#                     f"Invalid PREPROCESS type '{preprocess_type}' "
-#                     f"for Book {book_id_int}"
-#                 )
-
-#                 book_valid = False
-#                 batch_valid = False
-
-#         # -----------------------------------------------------
-#         # DSP_PROCESSING
-#         # -----------------------------------------------------
-
-#         if dsp_processing not in {"y", "n"}:
-
-#             log_error(
-#                 f"Invalid DSP_PROCESSING value '{dsp_processing}' "
-#                 f"for Book {book_id_int}"
-#             )
-
-#             book_valid = False
-#             batch_valid = False
-
-#         # -----------------------------------------------------
-#         # BOOK DIRECTORY
-#         # -----------------------------------------------------
-
-#         matching_dirs = [
-#             path for path in book_dirs if path.name.casefold() == book_name.casefold()
-#         ]
-
-#         if not matching_dirs:
-#             log_error(f"Book {book_id}: no directory matches BOOK " f"'{book_name}'.")
-#             book_valid = False
-#         elif len(matching_dirs) > 1:
-#             log_error(
-#                 f"Book {book_id}: multiple directories match BOOK " f"'{book_name}'."
-#             )
-#             book_valid = False
-#         else:
-#             book_dir = matching_dirs[0]
-#             book["book_path"] = book_dir
-
-#         # -----------------------------------------------------
-#         # COVER
-#         # -----------------------------------------------------
-
-#         covers_dir = batch_dir / "covers"
-
-#         matching_covers = []
-
-#         if covers_dir.is_dir():
-#             for cover in covers_dir.iterdir():
-#                 if (
-#                     cover.is_file()
-#                     and cover.suffix.lower() in [".png", ".jpg", ".jpeg", ".webp"]
-#                     and cover.stem.casefold() == book_name.casefold()
-#                 ):
-#                     matching_covers.append(cover)
-
-#         if len(matching_covers) > 1:
-#             log_error(f"Book {book_id}: multiple covers found for " f"'{book_name}'.")
-#         elif len(matching_covers) == 0:
-#             log_warning(f"No matching cover found for Book {book_id}: {book_name}")
-#         else:
-#             cover_path = matching_covers[0]
-#             book["cover_path"] = cover_path
-
-#         # -----------------------------------------------------
-#         # BOOK STATUS
-#         # -----------------------------------------------------
-
-#         if book_valid:
-#             log_ok(f"Book {book_id} : {book_name}")
-#         else:
-#             batch_valid = False
-
-#     # -------------------------------------------------------------------------
-#     # BOOK ID SEQUENCE
-#     # -------------------------------------------------------------------------
-
-#     expected_ids = [int(i) for i in range(1, len(batch["books"]) + 1)]
-#     actual_ids = [int(i) for i in book_ids]
-#     actual_ids = sorted(actual_ids)
-
-#     if actual_ids != expected_ids:
-#         log_error(
-#             "Book IDs must form a complete sequential sequence "
-#             f"from 1 to {len(batch['books'])}."
-#             f"Expected {expected_ids}, found {actual_ids}"
-#         )
-#         batch_valid = False
-
-#     # -------------------------------------------------------------------------
-#     # FINAL VALIDATION STATUS
-#     # -------------------------------------------------------------------------
-
-#     if not batch_valid:
-#         log_error("Batch validation failed. Processing aborted.")
-#         terminate_program()
-
-#     print()
-#     log_ok("Batch configuration checked\n")
-#     rich_divider(char="-")
-#     print()
 
 
 def validate_batch(batch):
@@ -1014,13 +776,7 @@ def process_single_book(book):
         book_dir, preprocess, preprocess_type, operation_kind="Pre-processing"
     )
 
-    time_11 = time.time()
-
     dsp.audio_cleaning(book_dir, dsp_processing)
-
-    time_12 = time.time()
-
-    const.PYTHON_DSP_TIME = time_12 - time_11
 
     complete_next_phases = verify_audio_files(const.STANDARDIZED_BOOK_PATH)
 
@@ -1043,6 +799,8 @@ def process_single_book(book):
         result = [book_name, True]
     else:
         result = [book_name, False]
+
+    log_ok("Audiobook Processing complete\n")
 
     return result
 

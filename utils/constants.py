@@ -4,6 +4,14 @@ import sys
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
+
+# ============================================================
+# BATCH Directory
+# ============================================================
+
+BATCH_DIR = "/home/rushikesh/Audiobooks/Unprocessed/Test_batch/"
+
+
 # ============================================================
 # Logging constants
 # ============================================================
@@ -39,6 +47,8 @@ SKIP_DSP_OF_THIS_FILE = False
 
 SKIP_DSP_FILES = []
 
+DEFAULT_PART_MINUTES = 60
+
 
 # ============================================================
 # BATCH CONSTANTS
@@ -52,8 +62,6 @@ REQUIRED_FIELDS = {
     "PREPROCESS_TYPE",
     "DSP_PROCESSING",
 }
-
-BATCH_DIR = ""
 
 # ============================================================
 # PROJECT LOGGING DIRECTORIES
@@ -125,17 +133,3 @@ SUPPORTED_AUDIO_EXTENSIONS = [
     ".3gp",
     ".3gpp",
 ]
-
-
-# ============================================================
-# TIME ANALYSIS CONSTANTS
-# ============================================================
-
-FFMPEG_TIME = 0
-PYTHON_TIME = 0
-PYTHON_DSP_TIME = 0
-
-Entire_analyze_audio = 0
-calculate_loudness = 0
-calculate_loudness_list = []
-analyze_audio_list = []

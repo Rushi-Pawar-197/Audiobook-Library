@@ -151,4 +151,5 @@ def update_metadata(book_dir: str, cover_path: str, artist: str, album: str):
                 tmp.unlink(missing_ok=True)
             util.log_error(f" {src.name}: {e}", indent=const.INDENT_FILE_LOG)
 
-    util.log_ok("Metadata written")
+    util.log_ok("Metadata written successfully\n")
+    util.log_ok("Phase 3 complete\n")

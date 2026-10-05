@@ -1,4 +1,4 @@
-.PHONY: setup venv system-deps install run clean
+.PHONY: setup venv system-deps install run doctor clean
 
 # ============================================================
 # OS DETECTION
@@ -126,27 +126,56 @@ setup: system-deps venv install
 
 
 # ============================================================
-# CREATE VIRTUAL ENVIRONMENT
+# CREATE / VALIDATE VIRTUAL ENVIRONMENT
 # ============================================================
 
 venv:
 
 ifeq ($(OS),Windows_NT)
 
-	@if exist venv ( \
-		echo [OK] Virtual environment already exists. \
+	@if exist venv\Scripts\python.exe ( \
+		venv\Scripts\python.exe -m pip --version >nul 2>nul \
+		if errorlevel 1 ( \
+			echo [WARNING] Virtual environment is incomplete or unusable. && \
+			echo [INFO] Removing broken virtual environment... && \
+			rmdir /S /Q venv && \
+			echo [INFO] Creating virtual environment... && \
+			$(PYTHON) -m venv venv || exit /b 1 \
+		) else ( \
+			echo [OK] Virtual environment is healthy. \
+		) \
 	) else ( \
+		if exist venv (echo [WARNING] Virtual environment is incomplete or unusable. && rmdir /S /Q venv) \
 		echo [INFO] Creating virtual environment... && \
 		$(PYTHON) -m venv venv || exit /b 1 \
 	)
 
 else
 
-	@if [ -d "venv" ]; then \
-		printf "[OK]  Virtual environment already exists.\n"; \
+	@if [ -x "$(VENV_PYTHON)" ] && "$(VENV_PYTHON)" -m pip --version >/dev/null 2>&1; then \
+		CURRENT_PY=$$($(PYTHON) -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'); \
+		VENV_PY=$$($(VENV_PYTHON) -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")'); \
+		if [ "$$CURRENT_PY" = "$$VENV_PY" ]; then \
+			printf "[OK]  Virtual environment is healthy (Python $$VENV_PY).\n"; \
+		else \
+			printf "[WARNING] Virtual environment uses Python $$VENV_PY, current Python is $$CURRENT_PY.\n"; \
+			printf "[INFO] Recreating virtual environment...\n"; \
+			rm -rf venv; \
+			$(PYTHON) -m venv venv || exit 1; \
+			printf "[OK]  Virtual environment recreated.\n"; \
+		fi; \
 	else \
+		if [ -d "venv" ]; then \
+			printf "[WARNING] Virtual environment is incomplete or unusable.\n"; \
+			printf "[INFO] Removing broken virtual environment...\n"; \
+			rm -rf venv; \
+		fi; \
 		printf "[INFO] Creating virtual environment...\n"; \
-		$(PYTHON) -m venv venv || exit 1; \
+		$(PYTHON) -m venv venv || { \
+			printf "[ERROR] Could not create the virtual environment.\n"; \
+			printf "[INFO] Your Python installation may be missing its venv package.\n"; \
+			exit 1; \
+		}; \
 		printf "[OK]  Virtual environment created.\n"; \
 	fi
 
@@ -177,6 +206,58 @@ endif
 
 
 # ============================================================
+# ENVIRONMENT DIAGNOSTICS
+# ============================================================
+
+doctor:
+
+ifeq ($(OS),Windows_NT)
+
+	@echo.
+	@echo Audiobook Library Environment
+	@echo ============================
+	@echo OS: $(DETECTED_OS)
+	@$(PYTHON) --version
+	@if exist venv\Scripts\python.exe ( \
+		echo Venv: present && \
+		venv\Scripts\python.exe --version && \
+		venv\Scripts\python.exe -m pip --version || exit /b 1 \
+	) else ( \
+		echo Venv: MISSING && exit /b 1 \
+	)
+	@if exist requirements.txt (echo Requirements: present) else (echo Requirements: MISSING && exit /b 1)
+	@where ffmpeg >nul 2>nul && echo FFmpeg: OK || (echo FFmpeg: MISSING && exit /b 1)
+	@where ffprobe >nul 2>nul && echo FFprobe: OK || (echo FFprobe: MISSING && exit /b 1)
+	@venv\Scripts\python.exe -m pip check
+
+else
+
+	@printf "\nAudiobook Library Environment\n"
+	@printf "============================\n"
+	@printf "OS: $(DETECTED_OS)\n"
+	@printf "System Python: "; $(PYTHON) --version
+	@if [ -x "$(VENV_PYTHON)" ]; then \
+		printf "Venv Python:   "; $(VENV_PYTHON) --version; \
+		if $(VENV_PYTHON) -m pip --version >/dev/null 2>&1; then \
+			printf "Pip:           OK\n"; \
+		else \
+			printf "Pip:           MISSING/UNUSABLE\n"; \
+			exit 1; \
+		fi; \
+	else \
+		printf "Venv Python:   MISSING\n"; \
+		exit 1; \
+	fi
+	@if [ -f requirements.txt ]; then printf "Requirements:   present\n"; else printf "Requirements:   MISSING\n"; exit 1; fi
+	@if command -v ffmpeg >/dev/null 2>&1; then printf "FFmpeg:         OK\n"; else printf "FFmpeg:         MISSING\n"; exit 1; fi
+	@if command -v ffprobe >/dev/null 2>&1; then printf "FFprobe:        OK\n"; else printf "FFprobe:        MISSING\n"; exit 1; fi
+	@$(VENV_PYTHON) -m pip check
+	@printf "[OK]  Environment diagnostics complete.\n"
+
+endif
+
+
+# ============================================================
 # RUN MAIN PROGRAM
 # ============================================================
 
@@ -192,6 +273,15 @@ else
 
 endif
 
+# ============================================================
+# SPLIT AUDIOBOOK
+# ============================================================
+
+split:
+	@$(VENV_PYTHON) /Audiobook-Library/utils/split.py "$(filter-out split,$(MAKECMDGOALS))"
+
+%:
+	@:
 
 # ============================================================
 # CLEAN PYTHON CACHE

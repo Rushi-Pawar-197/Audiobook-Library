@@ -6,8 +6,7 @@ import numpy as np
 import shutil
 from pathlib import Path
 import sys
-
-import time
+import re
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -83,38 +82,83 @@ def get_audio_info(file_path):
 # ============================================================
 
 
+def _parse_ebur128(stderr):
+    """Parse EBU R128 measurements from FFmpeg ebur128 output."""
+
+    integrated_match = re.search(
+        r"Integrated loudness:\s*I:\s*([-+]?\d+(?:\.\d+)?)\s*LUFS",
+        stderr,
+    )
+
+    lra_match = re.search(
+        r"Loudness range:\s*LRA:\s*([-+]?\d+(?:\.\d+)?)\s*LU",
+        stderr,
+    )
+
+    true_peak_match = re.search(
+        r"True peak:\s*Peak:\s*([-+]?\d+(?:\.\d+)?)\s*dBFS",
+        stderr,
+    )
+
+    if not all((integrated_match, lra_match, true_peak_match)):
+        return None
+
+    return {
+        "integrated_loudness": float(integrated_match.group(1)),
+        "true_peak": float(true_peak_match.group(1)),
+        "loudness_range": float(lra_match.group(1)),
+    }
+
+
 def load_audio_for_analysis(file_path, sample_rate=16000):
     """
-    Decode audio through FFmpeg.
+    Decode audio for analysis and calculate EBU R128 loudness
+    in a single FFmpeg pass.
 
-    FFmpeg diagnostics are stored separately for this operation.
-    Recoverable decoder diagnostics are retained as a warning; a failed
-    decode still raises an error and stops processing of this file.
-
-    We use mono 16 kHz because this is more than enough
-    for the measurements we currently need.
+    Returns
+    -------
+    tuple
+        (audio, sample_rate, loudness)
     """
 
     file_path = Path(file_path)
 
+    stderr_log = const.LOGS_ANALYSIS / f"{file_path.name}.stderr"
+
+    filter_graph = (
+        "[0:a]asplit=2[analysis][loud];"
+        "[analysis]"
+        "aformat=sample_fmts=flt:"
+        f"sample_rates={sample_rate}:"
+        "channel_layouts=mono"
+        "[pcm];"
+        "[loud]"
+        "ebur128=peak=true:framelog=quiet"
+        "[meter]"
+    )
+
     command = [
         "ffmpeg",
-        "-v",
-        "error",
+        "-hide_banner",
+        "-loglevel",
+        "info",
         "-i",
         str(file_path),
-        "-ac",
-        "1",
-        "-ar",
-        str(sample_rate),
+        "-filter_complex",
+        filter_graph,
+        # Output 1: existing analysis signal.
+        "-map",
+        "[pcm]",
         "-f",
         "f32le",
+        "pipe:1",
+        # Output 2: ebur128 output is discarded.
+        "-map",
+        "[meter]",
+        "-f",
+        "null",
         "-",
     ]
-
-    stderr_log = os.path.join(const.LOGS_ANALYSIS / f"{file_path.name}.stderr")
-
-    time_3 = time.time()
 
     result, diagnostic_log = util.run_ffmpeg(
         command,
@@ -122,34 +166,56 @@ def load_audio_for_analysis(file_path, sample_rate=16000):
         stdout=subprocess.PIPE,
     )
 
-    time_4 = time.time()
-
-    const.FFMPEG_TIME += time_4 - time_3
-
     if result.returncode != 0:
-        log_location = f" See {diagnostic_log}." if diagnostic_log else ""
-        raise RuntimeError(f"FFmpeg audio analysis failed.{log_location}")
+        raise RuntimeError(
+            f"FFmpeg failed while decoding/analyzing {file_path.name}. "
+            f"See diagnostic log: {diagnostic_log}"
+        )
+
+    # ebur128 writes its measurements to FFmpeg's stderr.
+    # run_ffmpeg() redirects stderr to the diagnostic log, so read
+    # the retained log instead of using result.stderr.
+    if diagnostic_log is None:
+        raise RuntimeError(
+            f"FFmpeg produced no diagnostic output, so EBU R128 "
+            f"measurements could not be parsed for {file_path.name}."
+        )
+
+    try:
+        stderr = diagnostic_log.read_text(encoding="utf-8")
+    except OSError as exc:
+        raise RuntimeError(
+            f"Failed to read FFmpeg diagnostic log for "
+            f"{file_path.name}: {diagnostic_log}"
+        ) from exc
+
+    loudness = _parse_ebur128(stderr)
+
+    if loudness is None:
+        raise RuntimeError(
+            f"Failed to parse EBU R128 loudness measurements for "
+            f"{file_path.name}. See diagnostic log: {diagnostic_log}"
+        )
+
+    # This is the same mono 16 kHz float32 PCM stream produced by
+    # the previous analysis-only FFmpeg pass.
 
     if diagnostic_log is not None:
-        util.log_warning(
-            f"FFmpeg reported decoding issues while analyzing {file_path.name}. "
-            f"See {diagnostic_log}.\n",
-            indent=const.INDENT_FILE_LOG,
-        )
+        diagnostic_log.unlink(missing_ok=True)
 
     audio = np.frombuffer(result.stdout, dtype=np.float32)
 
-    if len(audio) == 0:
-        raise ValueError("Audio decoding produced no samples.")
+    if audio.size == 0:
+        raise RuntimeError(f"FFmpeg returned no audio data for {file_path.name}")
 
     duration = len(audio) / sample_rate
 
     if duration < 1.0:
-        raise ValueError(
-            f"Audio is too short for DSP analysis ({duration:.3f} seconds)."
+        raise RuntimeError(
+            f"Audio duration is too short for analysis: " f"{duration:.2f}s"
         )
 
-    return audio, sample_rate
+    return audio, sample_rate, loudness
 
 
 # ============================================================
@@ -187,58 +253,6 @@ def peak_dbfs(samples):
         return -120.0
 
     return 20 * math.log10(peak)
-
-
-# ============================================================
-# LOUDNESS
-# ============================================================
-
-
-def calculate_loudness(file_path):
-    """
-    Ask FFmpeg's loudnorm filter for loudness measurements.
-    """
-
-    command = [
-        "ffmpeg",
-        "-hide_banner",
-        "-i",
-        file_path,
-        "-af",
-        "loudnorm=print_format=json",
-        "-f",
-        "null",
-        "-",
-    ]
-
-    time_5 = time.time()
-
-    result = subprocess.run(
-        command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-    )
-
-    time_6 = time.time()
-
-    const.FFMPEG_TIME += time_6 - time_5
-
-    stderr = result.stderr
-
-    start = stderr.rfind("{")
-
-    if start == -1:
-        return None
-
-    try:
-        data = json.loads(stderr[start:])
-
-        return {
-            "integrated_loudness": float(data.get("input_i", 0)),
-            "true_peak": float(data.get("input_tp", 0)),
-            "loudness_range": float(data.get("input_lra", 0)),
-        }
-
-    except (json.JSONDecodeError, ValueError):
-        return None
 
 
 # ============================================================
@@ -761,7 +775,7 @@ def analyze_audio(file_path):
     # LOAD AUDIO
     # --------------------------------------------------------
 
-    audio, sample_rate = load_audio_for_analysis(file_path)
+    audio, sample_rate, loudness = load_audio_for_analysis(file_path)
 
     # --------------------------------------------------------
     # LEVELS
@@ -777,22 +791,6 @@ def analyze_audio(file_path):
     quiet_audio, noise_floor = find_stable_quiet_sections(audio, sample_rate)
 
     estimated_snr = overall_level - noise_floor
-
-    # --------------------------------------------------------
-    # LOUDNESS
-    # --------------------------------------------------------
-
-    time_55 = time.time()
-
-    loudness = calculate_loudness(file_path)
-
-    time_56 = time.time()
-
-    calculate_loudness_file = time_56 - time_55
-
-    const.calculate_loudness_list.append(util.format_time(calculate_loudness_file))
-
-    const.calculate_loudness += calculate_loudness_file
 
     # --------------------------------------------------------
     # HUM
@@ -1115,13 +1113,7 @@ def clean_audio(
 
     stderr_log = const.LOGS_CLEANING / f"{input_file.name}.stderr"
 
-    time_7 = time.time()
-
     result, diagnostic_log = util.run_ffmpeg(command, stderr_log)
-
-    time_8 = time.time()
-
-    const.FFMPEG_TIME += time_8 - time_7
 
     if result.returncode != 0:
         print()
@@ -1326,24 +1318,11 @@ def stage1_analyze(book_path, audio_files):
 
         try:
 
-            time_1 = time.time()
-
             result = analyze_audio(audio_file)
 
             if const.SKIP_DSP_OF_THIS_FILE == True:
                 raise util.DSP_Analysis_Error
-
             files.append(result)
-
-            time_2 = time.time()
-
-            individual_analyze_audio = time_2 - time_1
-
-            const.analyze_audio_list.append(
-                str(util.format_time(individual_analyze_audio))
-            )
-
-            const.Entire_analyze_audio += individual_analyze_audio
 
         except util.DSP_Analysis_Error as error:
             failed += 1

@@ -9,8 +9,6 @@ from utils import constants as const
 from utils import utility as util
 from preprocessing import in_order_rename as rename
 
-import time
-
 
 def normalize_audio_file(input_extension: str, book_path: str):
     """
@@ -83,15 +81,10 @@ def normalize_audio_file(input_extension: str, book_path: str):
 
         try:
 
-            time_9 = time.time()
             result, diagnostic_log = util.run_ffmpeg(
                 cmd,
                 stderr_log,
             )
-
-            time_10 = time.time()
-
-            const.FFMPEG_TIME += time_10 - time_9
 
             if result.returncode != 0:
                 if tmp.exists():
@@ -125,6 +118,7 @@ def normalize_audio_file(input_extension: str, book_path: str):
 
     print()
     util.log_ok(f"Audio Normalization complete\n")
+    util.log_ok(f"Phase 2 complete\n")
 
 
 def normalize_audiobook(book_dir: str):
