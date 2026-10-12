@@ -278,7 +278,7 @@ endif
 # ============================================================
 
 split:
-	@$(VENV_PYTHON) /Audiobook-Library/utils/split.py "$(filter-out split,$(MAKECMDGOALS))"
+	@$(VENV_PYTHON) utils/split.py "$(filter-out split,$(MAKECMDGOALS))"
 
 %:
 	@:

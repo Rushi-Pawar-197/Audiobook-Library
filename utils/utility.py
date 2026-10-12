@@ -18,8 +18,6 @@ from modules import Audio_Normalization as norm
 from modules import Audio_Metadata as meta
 from preprocessing import preprocessing as prep
 
-import time
-
 
 class TeeLogger:
 
@@ -247,7 +245,7 @@ def get_num_files(book_path: str):
     return audio_files
 
 
-def config_parameters(book_dir, cover_path, artist, album):
+def config_parameters(book_dir, cover_path, album):
 
     audio_files = get_num_files(book_dir)
     if audio_files == 0 or audio_files is None:
@@ -258,7 +256,6 @@ def config_parameters(book_dir, cover_path, artist, album):
     log(f"\nBook Path\t: [grey50]{book_dir}[/grey50]")
     log(f"Cover Path\t: [grey50]{cover_path}[/grey50]")
     log(f"Book\t\t: [yellow1]{album}[/yellow1]")
-    log(f"Author\t\t: [spring_green1]{artist}[/spring_green1]")
     log(f"Files\t\t: {n_audio_files}\n")
 
     rich_divider(char="-", colour="dark_turquoise")
@@ -640,6 +637,7 @@ def validate_batch(batch):
         # -----------------------------------------------------
 
         covers_dir = batch_dir / "covers"
+        valid_cover_path = ""
 
         matching_covers = []
 
@@ -657,15 +655,47 @@ def validate_batch(batch):
         elif len(matching_covers) == 0:
             log_warning(f"No matching cover found for Book {book_id}: {book_name}")
         else:
-            cover_path = matching_covers[0]
-            book["cover_path"] = cover_path
+            valid_cover_path = matching_covers[0]
+            book["cover_path"] = valid_cover_path
 
         # -----------------------------------------------------
         # BOOK STATUS
         # -----------------------------------------------------
 
         if book_valid:
-            log_ok(f"Book {book_id} : {book_name}")
+
+            log_ok(f"Book {book_id} : [bright_white]{book_name}[/bright_white]")
+
+            if preprocess == "y":
+                if preprocess_type == "1":
+                    preprocess_status = (
+                        "[bright_green][1] Disk Subfolder Structure[/bright_green]"
+                    )
+                elif preprocess_type == "2":
+                    preprocess_status = (
+                        "[bright_green][2] In-Order Rename[/bright_green]"
+                    )
+            else:
+                preprocess_status = "[bright_red]No[/bright_red]"
+
+            dsp_status = (
+                "[bright_green]Yes[/bright_green]"
+                if dsp_processing == "y"
+                else "[bright_red]No[/bright_red]"
+            )
+
+            cover_status = (
+                "[bright_green]Yes[/bright_green]"
+                if valid_cover_path
+                else "[bright_red]No[/bright_red]"
+            )
+
+            print()
+            log(f"Author\t\t: {author}", indent=const.INDENT_FILE_LOG)
+            log(f"Preprocessing\t: {preprocess_status}", indent=const.INDENT_FILE_LOG)
+            log(f"DSP Processing\t: {dsp_status}", indent=const.INDENT_FILE_LOG)
+            log(f"cover\t\t: {cover_status}\n\n", indent=const.INDENT_FILE_LOG)
+
         else:
             batch_valid = False
 
@@ -767,7 +797,7 @@ def process_single_book(book):
 
     setup_logging(book_dir)
 
-    valid_audio_files = config_parameters(book_dir, cover_path, author, book_name)
+    valid_audio_files = config_parameters(book_dir, cover_path, book_name)
 
     if not valid_audio_files:
         return [book_name, False]
